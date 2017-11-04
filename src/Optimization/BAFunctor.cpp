@@ -2,35 +2,79 @@
 
 #include <iostream>
 
-BAFunctor::BAFunctor(const Matrix3X& data_points) :
-	Base(data_points.cols() * 2 + 9, data_points.cols() * 3),
-	data_points(data_points),
-	numParameters(data_points.cols() * 2 + 9),
-	numResiduals(data_points.cols() * 3),
-	numJacobianNonzeros(data_points.cols() * 3 * 9 + data_points.cols() * 6) {
+BAFunctor::BAFunctor(const Eigen::Index numPoints, const Eigen::Index numCameras, const Eigen::Matrix2Xd &measurements,
+	const std::vector<int> &correspondingView, const std::vector<int> &correspondingPoint,
+	double inlierThreshold) 
+	: Base(numPoints * 3 + numCameras * 10, measurements.cols() * 2),
+	measurements(measurements),
+	correspondingView(correspondingView),
+	correspondingPoint(correspondingPoint),
+	inlierThreshold(inlierThreshold),
+	numParameters(numPoints * 3 + numCameras * 10),
+	numPointParams(numPoints * 3),
+	numResiduals(measurements.cols() * 2),
+	numJacobianNonzeros(measurements.cols() * 2 * 3 + 10 * numCameras) {
 
 	initWorkspace();
 }
 
 void BAFunctor::initWorkspace() {
-	Index nPoints = data_points.cols();
 
 }
 
 Scalar BAFunctor::estimateNorm(InputType const& x, StepType const& diag) {
-	return 0;	// FixMe: Implement norm est.
+	Index pt_base = 0;
+	Index cam_base = x.nDataPoints() * 3;
+
+	// Camera parameters ordering
+	Index numPointCoords = 3;	// xyz
+	Index numCamParams = 10;
+	Index translationOffset = 0;
+	Index rotationOffset = 3;
+	Index focalLengthOffset = 6;
+	Index radialParamsOffset = 7;
+
+	double total = 0.0;
+	Eigen::Vector3d T, omega;
+	Eigen::Vector2d k12;
+	double focalLength = 0.0;
+	Eigen::Matrix3d R;
+	for (int i = 0; i < x.nCameras(); i++) {
+		T = x.cams[i].getTranslation();
+		R = x.cams[i].getRotation();
+		Math::createRodriguesParamFromRotationMatrix(R, omega);
+		k12 = Eigen::Vector2d(x.distortions[i].getK1(), x.distortions[i].getK2());
+		focalLength = x.cams[i].getIntrinsic()(0, 0);
+
+		total += T.cwiseProduct(diag.segment<3>(cam_base + i * numCamParams)).stableNorm();
+		total += omega.cwiseProduct(diag.segment<3>(cam_base + i * numCamParams + rotationOffset)).stableNorm();
+		total += k12.cwiseProduct(diag.segment<2>(cam_base + i * numCamParams + radialParamsOffset)).stableNorm();
+		total += (focalLength * diag[cam_base + i * numCamParams + focalLengthOffset]);
+	}
+	total = total * total;
+
+
+	Map<VectorXd> xtop{ (double*)x.data_points.data(), x.nDataPoints() * 3 };
+	total += xtop.cwiseProduct(diag.head(x.nDataPoints() * 3)).stableNorm();
+
+	return double(sqrt(total));
+
+	/*
+	Eigen::Vector3d pt;
+	for (int i = 0; i < x.nDataPoints(); i++) {
+		pt = 
+	}
+	*/
 }
 
 // And tell the algorithm how to set the QR parameters.
 void BAFunctor::initQRSolver(SchurlikeQRSolver &qr) {
 	// set block size
-	/*
-	int blkRows = 3;
-	int blkCols = 2;
-	int blockOverlap = 0;
-	qr.setSparseBlockParams(data_points.cols() * blkRows, data_points.cols() * (blkCols - blockOverlap));
-	qr.getLeftSolver().setPattern(data_points.cols() * blkRows, data_points.cols() * (blkCols - blockOverlap), blkRows, blkCols, blockOverlap);
-	*/
+	//int blkRows = 2;
+	//int blkCols = 3;
+	//int blockOverlap = 0;
+	qr.setSparseBlockParams(this->measurements.cols() * 2, this->numPointParams);
+	//qr.getLeftSolver().setPattern(data_points.cols() * blkRows, data_points.cols() * (blkCols - blockOverlap), blkRows, blkCols, blockOverlap);
 }
 
 // Functor functions
@@ -57,7 +101,7 @@ int BAFunctor::df(const InputType& x, JacobianType& fjac) {
 }
 
 void BAFunctor::increment_in_place(InputType* x, StepType const& p) {
-	Index nPoints = data_points.cols();
+
 
 	this->increment_in_place_impl(x, p);
 }
@@ -65,14 +109,15 @@ void BAFunctor::increment_in_place(InputType* x, StepType const& p) {
 // Functor functions
 // 1. Evaluate the residuals at x
 void BAFunctor::f_impl(const InputType& x, ValueType& fvec) {
-
+	this->E_pos(x, this->measurements, this->correspondingView, this->correspondingPoint, fvec);
 }
 
 // 2. Evaluate jacobian at x
 void BAFunctor::df_impl(const InputType& x, Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals) {
-
+	this->dE_pos(x, jvals);
 }
 
 void BAFunctor::increment_in_place_impl(InputType* x, StepType const& p) {
-
+	// The parameters are passed to the optimization as:
+	this->update_params(x, p);
 }
