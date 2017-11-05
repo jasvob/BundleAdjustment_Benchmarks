@@ -164,14 +164,26 @@ namespace Eigen {
 			// Analyze input matrix pattern and perform row and column permutations
 			// Stores input matrix to m_pmat
 			analyzePattern(mat);
-			std::cout << "Analp: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
+		//	std::cout << "Analp: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
 
 			// Create dense version of the already permuted input matrix
 			// It is much faster to do the permutations on the sparse version
 			beginFull = clock();
 			this->m_pmatDense = this->m_pmat.toDense();
 
-			std::cout << "todense: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
+			// Initialize householder permutation matrix
+			this->m_houseColPerm.setIdentity(this->m_pmatDense.cols());
+
+			// Reset nonzero pivots count
+			this->m_nonzeroPivots = 0;
+
+			// Prepare m_R to be filled in
+			m_R.resize(this->m_pmatDense.rows(), this->m_pmatDense.cols());
+			m_R.setZero();
+			// Reserve number of elements needed in case m_R is full upper triangular
+			m_R.reserve(this->m_pmatDense.cols() * this->m_pmatDense.cols() / 2.0);
+
+		//	std::cout << "todense: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
 			// And start factorizing block-by-block
 			Index solvedCols = 0;
 			Index cntr = 0;
@@ -181,24 +193,38 @@ namespace Eigen {
 
 				// Get next block info
 				this->updateBlockInfo(solvedCols, this->m_pmat, _SuggestedBlockCols);
-				
+
 				// Factorize current block
 				factorize(this->m_pmatDense);
 				solvedCols += this->denseBlockInfo.numCols;
 
-				std::cout << "Fact_" << cntr++ << ": " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+		//		std::cout << "Fact_" << cntr++ << ": " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 				//if (solvedCols > 1000)
 				//	break;
 			}
-//			std::cout << "Fact_total: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
+			//			std::cout << "Fact_total: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
+
+			// Set computed Householder column permutation
+			for (int c = 0; c < this->m_nnzColPermIdxs.size(); c++) {
+				this->m_houseColPerm.indices()(this->m_nnzColPermIdxs[c]) = c;
+			}
+			for (int c = 0; c < this->m_zeroColPermIdxs.size(); c++) {
+				this->m_houseColPerm.indices()(this->m_zeroColPermIdxs[c]) = this->m_nnzColPermIdxs.size() + c;
+			}
+
+			// Combine the two column permutation matrices together
+			this->m_outputPerm_c = this->m_houseColPerm * this->m_outputPerm_c;
+
+			// Don't forget to finalize m_R
+			m_R.finalize();
 
 			// m_pmatDense is now upper triangular (it is in fact the R)
-			RowMajorMatrixType rmR(m_pmatDense.rows(), m_pmatDense.cols());
+			/*RowMajorMatrixType rmR(m_pmatDense.rows(), m_pmatDense.cols());
 			rmR.setZero();
 			rmR.topRows(rmR.cols()) = m_pmatDense.topRows(rmR.cols()).sparseView();
 			this->m_R = MatrixType(rmR).template triangularView<Upper>();
-
-			this->m_nonzeropivots = this->m_R.cols();
+			*/
+			//this->m_nonzeropivots = this->m_R.cols();
 			m_isInitialized = true;
 		}
 		void analyzePattern(const MatrixType& mat, bool rowPerm = true, bool colPerm = true);
@@ -235,7 +261,7 @@ namespace Eigen {
 		Index rank() const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			return m_nonzeropivots;
+			return m_nonzeroPivots;
 		}
 
 		/** \returns an expression of the matrix Q as products of sparse Householder reflectors.
@@ -370,26 +396,28 @@ namespace Eigen {
 		bool m_factorizationIsok;
 		mutable ComputationInfo m_info;
 		std::string m_lastError;
-		
+
 		MatrixType  m_pmat;				// Sparse version of input matrix - used for ordering and search purposes
 		DenseMatrixType  m_pmatDense;	// Dense version of the input matrix - used for factorization (much faster than using sparse)
-		
+
 		MatrixRType m_R;                // The triangular factor matrix
 		SparseBlockYTY m_blocksYT;		// Sparse block matrix storage holding the dense YTY blocks of the blocked representation of Householder reflectors.
 
 		PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
 		PermutationType m_rowPerm;
+		PermutationType m_houseColPerm;
+		std::vector<Index> m_nnzColPermIdxs;
+		std::vector<Index> m_zeroColPermIdxs;
 
 		RealScalar m_threshold;         // Threshold to determine null Householder reflections
 		bool m_useDefaultThreshold;     // Use default threshold
-		Index m_nonzeropivots;          // Number of non zero pivots found
+		Index m_nonzeroPivots;          // Number of non zero pivots found
 		bool m_useMultiThreading;		// Use multithreaded implementation of Householder product evaluation
 		bool m_hasRowPermutation;		// Row permutation performed during the factorization
 
 										/*
 										* Structures filled during sparse matrix pattern analysis.
 										*/
-
 		MatrixBlockInfo denseBlockInfo;
 
 		template <typename, typename > friend struct DenseBlockedThinSparseQR_QProduct;
@@ -411,9 +439,9 @@ namespace Eigen {
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void DenseBlockedThinSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::analyzePattern(const MatrixType& mat, bool rowPerm, bool colPerm)
 	{
-		typedef ColumnCount<MatrixType::StorageIndex> MatrixColCount;
-		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
-		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
+		typedef ColumnCount<typename MatrixType::StorageIndex> MatrixColCount;
+		typedef RowRange<typename MatrixType::StorageIndex> MatrixRowRange;
+		typedef std::map<typename MatrixType::StorageIndex, typename MatrixType::StorageIndex> BlockBandSize;
 
 		Index n = mat.cols();
 		Index m = mat.rows();
@@ -422,22 +450,21 @@ namespace Eigen {
 		/******************************************************************/
 		// Create column permutation (according to the number of nonzeros in columns
 		if (colPerm) {
-			/*
 			std::vector<MatrixColCount> colNnzs;
 			for (Index c = 0; c < mat.cols(); c++) {
 				colNnzs.push_back(MatrixColCount(c, mat.col(c).nonZeros()));
 			}
 			std::stable_sort(colNnzs.begin(), colNnzs.end());
-			Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> colpermIndices(colNnzs.size());
+			Eigen::Matrix<typename MatrixType::StorageIndex, Dynamic, 1> colpermIndices(colNnzs.size());
 			for (Index c = 0; c < colNnzs.size(); c++) {
 				colpermIndices(colNnzs[c].origIdx) = c;
 			}
 			this->m_outputPerm_c = PermutationType(colpermIndices);
-			*/
+			/*
 			this->m_outputPerm_c.resize(mat.cols());
-			COLAMDOrdering<MatrixType::StorageIndex> ord;
+			COLAMDOrdering<typename MatrixType::StorageIndex> ord;
 			ord(mat, this->m_outputPerm_c);
-			
+			*/
 
 			m_pmat = mat * this->m_outputPerm_c;
 		}
@@ -454,10 +481,10 @@ namespace Eigen {
 			BlockBandSize bandWidths, bandHeights;
 			RowMajorMatrixType rmMat(m_pmat);
 			std::vector<MatrixRowRange> rowRanges;
-			for (MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
-				RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
-				MatrixType::StorageIndex startIdx = rowIt.index();
-				MatrixType::StorageIndex endIdx = startIdx;
+			for (typename MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
+				typename RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
+				typename MatrixType::StorageIndex startIdx = rowIt.index();
+				typename MatrixType::StorageIndex endIdx = startIdx;
 				while (++rowIt) { endIdx = rowIt.index(); }	// FixMe: Is there a better way?
 				rowRanges.push_back(MatrixRowRange(j, startIdx, endIdx));
 			}
@@ -470,27 +497,27 @@ namespace Eigen {
 			// Perform the actual row sorting if needed
 			if (this->m_hasRowPermutation) {
 				std::stable_sort(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
-					return (lhs.start < rhs.start);
-					/*if (lhs.start < rhs.start) {
-						return true;
+					//return (lhs.start < rhs.start);
+					if (lhs.start < rhs.start) {
+					return true;
 					}
-					//else if (lhs.start == rhs.start) {
-					else if (!(rhs.start < lhs.start)) {
-						if (lhs.end < rhs.end) {
-							return true;
-						}
-						else {
-							return lhs.origIdx < rhs.origIdx;
-						}
+					else if (lhs.start == rhs.start) {
+					//else if (!(rhs.start < lhs.start)) {
+					if (lhs.end < rhs.end) {
+					return true;
 					}
 					else {
-						return false;
-					}*/
+					return lhs.origIdx < rhs.origIdx;
+					}
+					}
+					else {
+					return false;
+					}
 				});
 			}
 
-			Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
-			MatrixType::StorageIndex rowIdx = 0;
+			Eigen::Matrix<typename MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
+			typename MatrixType::StorageIndex rowIdx = 0;
 			for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
 				permIndices(it->origIdx) = rowIdx;
 			}
@@ -505,7 +532,7 @@ namespace Eigen {
 			// Don't waste time calling matrix multiplication if the permutation is identity
 		}
 		/******************************************************************/
-		
+
 		m_analysisIsok = true;
 	}
 
@@ -518,14 +545,15 @@ namespace Eigen {
 			colIdx = m_pmat.cols() - 1;
 			newCols = m_pmat.cols() - solvedCols;
 			numRows = m_pmat.rows() - solvedCols;
-		} else {
-			MatrixType::StorageIndex biggestEndIdx = 0;
-			for(int c = 0; c < newCols; c++) {
+		}
+		else {
+			typename MatrixType::StorageIndex biggestEndIdx = 0;
+			for (int c = 0; c < newCols; c++) {
 				//MatrixType::InnerIterator colIt(m_pmat, solvedCols + newCols - 1);
-				MatrixType::InnerIterator colIt(m_pmat, solvedCols + c);
-				MatrixType::StorageIndex endIdx = 0;// startIdx;
+				typename MatrixType::InnerIterator colIt(m_pmat, solvedCols + c);
+				typename MatrixType::StorageIndex endIdx = 0;// startIdx;
 				while (++colIt) { endIdx = colIt.index(); }	// FixMe: Is there a better way?
-				
+
 				if (endIdx > biggestEndIdx) {
 					biggestEndIdx = endIdx;
 				}
@@ -541,15 +569,15 @@ namespace Eigen {
 
 		this->denseBlockInfo = MatrixBlockInfo(solvedCols, numRows, newCols);
 
-//		std::cout << "Solving Dense block: " << this->denseBlockInfo.idxDiag << ", " << this->denseBlockInfo.numRows << ", " << this->denseBlockInfo.numCols
-//			<< " of matrix size " << this->m_pmat.rows() - solvedCols << "x" << this->m_pmat.cols() - solvedCols << std::endl;
+		//		std::cout << "Solving Dense block: " << this->denseBlockInfo.idxDiag << ", " << this->denseBlockInfo.numRows << ", " << this->denseBlockInfo.numCols
+		//			<< " of matrix size " << this->m_pmat.rows() - solvedCols << "x" << this->m_pmat.cols() - solvedCols << std::endl;
 	}
 
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void DenseBlockedThinSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::updateMat(const Index &fromIdx, const Index &toIdx, DenseMatrixType &mat, const Index &blockK) {
 		// Now update the unsolved rest of m_pmat
-		SparseBlockYTY::Element blockYTY = this->m_blocksYT[this->m_blocksYT.size() - 1];
-	
+		typename SparseBlockYTY::Element blockYTY = this->m_blocksYT[this->m_blocksYT.size() - 1];
+
 		Index blockRows = this->m_blocksYT[blockK].value.rows();
 		///*
 		const size_t nloop = toIdx - fromIdx;
@@ -578,11 +606,11 @@ namespace Eigen {
 		}
 		//*/
 		/*
-			for (int ci = fromIdx; ci < toIdx; ci++) {
-				// We can afford noalias() in this case
-				mat.middleRows(this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows).col(ci).noalias()
-					+= (this->m_blocksYT[blockK].value.Y() * (this->m_blocksYT[blockK].value.T().transpose() * (this->m_blocksYT[blockK].value.Y().transpose() * mat.middleRows(this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows).col(ci))));
-			}
+		for (int ci = fromIdx; ci < toIdx; ci++) {
+		// We can afford noalias() in this case
+		mat.middleRows(this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows).col(ci).noalias()
+		+= (this->m_blocksYT[blockK].value.Y() * (this->m_blocksYT[blockK].value.T().transpose() * (this->m_blocksYT[blockK].value.Y().transpose() * mat.middleRows(this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows).col(ci))));
+		}
 		//*/
 	}
 
@@ -600,7 +628,8 @@ namespace Eigen {
 		//		Eigen::TripletArray<Scalar, typename MatrixType::Index> Rvals(2 * mat.nonZeros());
 
 		// Dense QR solver used for each dense block 
-		Eigen::HouseholderQR<DenseMatrixType> houseqr;
+		//Eigen::HouseholderQR<DenseMatrixType> houseqr;
+		Eigen::ColPivHouseholderQR<DenseMatrixType> houseqr;
 
 		// Prepare the first block
 		DenseMatrixType Ji = m_pmatDense.block(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows, this->denseBlockInfo.numCols);
@@ -609,9 +638,23 @@ namespace Eigen {
 		// 1) Factorize the block
 		houseqr.compute(Ji);
 
+	//	std::cout << "Rank: " << houseqr.rank() << std::endl;
+
+		//std::cout << "----- MatrixQR --------\n" << houseqr.matrixQR() << "---------------------" << std::endl;
+
+		// Update column permutation according to ColPivHouseholderQR
+		for (Index c = 0; c < houseqr.nonzeroPivots(); c++) {
+			this->m_nnzColPermIdxs.push_back(this->denseBlockInfo.idxDiag + houseqr.colsPermutation().indices()(c));
+		}
+		for (Index c = houseqr.nonzeroPivots(); c < this->denseBlockInfo.numCols; c++) {
+			this->m_zeroColPermIdxs.push_back(this->denseBlockInfo.idxDiag + houseqr.colsPermutation().indices()(c));
+		}
+		//this->m_houseColPerm.indices()(this->denseBlockInfo.idxDiag + c) = this->denseBlockInfo.idxDiag + houseqr.colsPermutation().indices()(c);
+
 		// 2) Create matrices T and Y
 		Index numRows = this->denseBlockInfo.numRows;
-		Index numCols = this->denseBlockInfo.numCols;
+		//Index numCols = this->denseBlockInfo.numCols;
+		Index numCols = houseqr.nonzeroPivots(); // !!! Only for the nonzero pivots !!!
 		MatrixXd T = MatrixXd::Zero(numCols, numCols);
 		MatrixXd Y = MatrixXd::Zero(numRows, numCols);
 		VectorXd v = VectorXd::Zero(numRows);
@@ -620,7 +663,7 @@ namespace Eigen {
 		v.segment(1, numRows - 1) = houseqr.householderQ().essentialVector(0).segment(0, numRows - 1);
 		Y.col(0) = v;
 		T(0, 0) = -houseqr.hCoeffs()(0);
-		for (MatrixType::StorageIndex bc = 1; bc < numCols; bc++) {
+		for (typename MatrixType::StorageIndex bc = 1; bc < numCols; bc++) {
 			v.setZero();
 			v(bc) = 1.0;
 			v.segment(bc + 1, numRows - bc - 1) = houseqr.householderQ().essentialVector(bc).segment(0, numRows - bc - 1);
@@ -632,10 +675,23 @@ namespace Eigen {
 			T(bc, bc) = -houseqr.hCoeffs()(bc);
 		}
 		// Save current Y and T. The block YTY contains a main diagonal and subdiagonal part separated by (numZeros) zero rows.
-		m_blocksYT.insert(SparseBlockYTY::Element(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, BlockYTY<Scalar, StorageIndex>(Y, T, 0)));
+		//	m_blocksYT.insert(typename SparseBlockYTY::Element(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, BlockYTY<Scalar, StorageIndex>(Y, T, 0)));
+		m_blocksYT.insert(typename SparseBlockYTY::Element(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, BlockYTY<Scalar, StorageIndex>(Y, T, 0)));
 
 		// Update the trailing columns of the matrix block
 		this->updateMat(this->denseBlockInfo.idxDiag, m_pmatDense.cols(), m_pmatDense, this->m_blocksYT.size() - 1);
+
+		// Add solved columns to R
+		// m_nonzeroPivots is telling us where is the current diagonal position
+		for (typename MatrixType::StorageIndex bc = 0; bc < numCols; bc++) {
+			m_R.startVec(this->m_nonzeroPivots + bc);
+			for (typename MatrixType::StorageIndex br = 0; br <= bc; br++) {
+				m_R.insertBack(this->m_nonzeroPivots + br, this->m_nonzeroPivots + bc) = houseqr.matrixQR()(br, bc);
+			}
+		}
+
+		// Add nonzero pivots from this block
+		this->m_nonzeroPivots += houseqr.nonzeroPivots();
 	}
 
 	/*
@@ -695,9 +751,9 @@ namespace Eigen {
 										VectorXd resColJd;
 										resColJd = m_other.col(j).toDense();
 										for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-											tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows()); 
+											tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
 											tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.rows()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.rows());
-											
+
 											// We can afford noalias() in this case
 											tmpResColJ.noalias() += m_qr.m_blocksYT[k].value.multTransposed(tmpResColJ);
 
@@ -709,7 +765,7 @@ namespace Eigen {
 										resColJ = resColJd.sparseView();
 										numNonZeros += resColJ.nonZeros();
 										resVals[j].reserve(resColJ.nonZeros());
-										for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+										for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 											resVals[j].push_back(std::make_pair(it.row(), it.value()));
 										}
 
@@ -755,7 +811,7 @@ namespace Eigen {
 										resColJ = resColJd.sparseView();
 										numNonZeros += resColJ.nonZeros();
 										resVals[j].reserve(resColJ.nonZeros());
-										for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+										for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 											resVals[j].push_back(std::make_pair(it.row(), it.value()));
 										}
 
@@ -807,7 +863,7 @@ namespace Eigen {
 						// Write the result back to j-th column of res
 						resColJ = resColJd.sparseView();
 						res.startVec(j);
-						for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+						for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 							res.insertBack(it.row(), j) = it.value();
 						}
 					}
@@ -833,7 +889,7 @@ namespace Eigen {
 						// Write the result back to j-th column of res
 						resColJ = resColJd.sparseView();
 						res.startVec(j);
-						for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+						for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 							res.insertBack(it.row(), j) = it.value();
 						}
 					}
@@ -883,7 +939,7 @@ namespace Eigen {
 				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
 					partialRes = VectorXd(m_qr.m_blocksYT[k].value.rows());
 					partialRes.segment(0, m_qr.m_blocksYT[k].value.rows()) = res.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.rows());
-					
+
 					// We can afford noalias() in this case
 					partialRes.noalias() += m_qr.m_blocksYT[k].value.multTransposed(partialRes);
 

@@ -365,7 +365,6 @@ namespace Eigen {
 	/*********************************************************************************************************/
 	template <typename RightBlockSolverType, typename StorageIndex, typename SrcType>
 	void makeR(const int m1, const int m2, const int n1, const int n2, const SrcType &R2, const SrcType &J2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &R1, const RightBlockSolverType &rightSolver, SparseMatrix<Scalar, ColMajor, StorageIndex> &Rout) {
-		clock_t begin = clock();
 		{
 			Rout.resize(n1 + n2, m1 + m2);
 			Rout.reserve(R1.nonZeros() + n1 * m2 + ((m2 - 1) * m2) / 2);
@@ -388,12 +387,9 @@ namespace Eigen {
 			}
 			Rout.finalize();
 		}
-
-		std::cout << "m_R from insertBack ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 	}
 	template <typename RightBlockSolverType, typename StorageIndex>
 	void makeR(const int m1, const int m2, const int n1, const int n2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &R2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &J2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &R1, const RightBlockSolverType &rightSolver, SparseMatrix<Scalar, ColMajor, StorageIndex> &Rout) {
-		clock_t begin = clock();
 		{
 			Eigen::MatrixXd J2top = J2.topRows(m1);
 
@@ -421,49 +417,27 @@ namespace Eigen {
 			}
 			Rout.finalize();
 		}
-
-		std::cout << "m_R from insertBack ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-		
 	}
+
 	/*********************************************************************************************************/
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex, typename MatType>
 	void solveRightBlock(const int m1, const int m2, const int n1, const int n2, MatType &J2, const SparseMatrix<Scalar, RowMajor, StorageIndex> &mat, RightBlockSolver &rightSolver, LeftBlockSolver &leftSolver) {
-		clock_t begin = clock();
-		std::cout << "Copy toprows ... " << std::endl;
-		std::cout << mat.rows() << ", " << mat.cols() << std::endl;
-		std::cout << 0 << ", " << m1 << ", " << n1 << ", " << m2 << std::endl;
 		MatType J2toprows = mat.block(0, m1, n1, m2).toDense();
-		std::cout << "J2toprows ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-		begin = clock();
 		J2.topRows(n1).noalias() = leftSolver.matrixQ().transpose() * J2toprows;
-		std::cout << "Q1.transpose() * J2 ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-		begin = clock();
 		J2.bottomRows(n2) = mat.block(n1, m1, n2, m2);
-		std::cout << "J2.bottomRows(n2) = ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 
-		begin = clock();
 		rightSolver.compute(J2.bottomRows(n1 + n2 - m1));
-		std::cout << "m_rightSolver.compute(J2.bottomRows()) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 	}
 
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex>
 	void solveRightBlock(const int m1, const int m2, const int n1, const int n2, SparseMatrix<Scalar, ColMajor, StorageIndex> &J2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &mat, RightBlockSolver &rightSolver, LeftBlockSolver &leftSolver) {
-		std::cout << "solveRightBlock begin ... " << std::endl;
 		J2 = mat.rightCols(m2);
-		std::cout << "J2 = mat.rightCols(m2) ... " << std::endl;
 		SparseMatrix<Scalar, RowMajor, StorageIndex> rmJ2(J2);
-		std::cout << "rmJ2 ... " << std::endl;
-
 		rmJ2.topRows(n1) = leftSolver.matrixQ().transpose() * rmJ2.topRows(n1);
-		std::cout << "Q1.T * rmJ2 ... " << std::endl;
 		J2 = SparseMatrix<Scalar, ColMajor, StorageIndex>(rmJ2);
-		std::cout << "J2 = rmJ2 ... " << std::endl;
 		
 		SparseMatrix<Scalar> J2bot = J2.bottomRows(n1 - m1);
-		std::cout << "J2bot ... " << std::endl;
-		std::cout << "solve right block ... " << J2bot.rows() << " x " << J2bot.cols() << std::endl;
 		rightSolver.compute(J2bot);
-		std::cout << "rightSolver.compute(J2bot) ... " << std::endl;
 	}
 	/*********************************************************************************************************/
 
@@ -480,7 +454,6 @@ namespace Eigen {
 	void BlockAngularSparseQR_Ext<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::factorize(const MatrixType& mat)
 	{
 		clock_t begin = clock();
-		std::cout << "start factorize ... " << std::endl;
 
 		typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
 		typedef MatrixType::Index Index;
@@ -497,7 +470,6 @@ namespace Eigen {
 		Logger::instance()->logMatrixCSV(mat.rightCols(m2).toDense(), "J2.csv");
 #endif
 
-		std::cout << "solve left block ... " << n1 << " x " << m1 << std::endl;
 		// 1) Solve already block diagonal left block to get Q1 and R1
 		begin = clock();
 		m_leftSolver.compute(mat.block(0, 0, n1, m1));
@@ -505,7 +477,6 @@ namespace Eigen {
 		eigen_assert(m_leftSolver.info() == Success);		
 
 		typename BlockQRSolverLeft::MatrixRType R1 = m_leftSolver.matrixR();
-		std::cout << "m_leftSolver.matrixR() ... " << std::endl;
 
 #ifdef OUTPUT_MAT
 		Logger::instance()->logMatrixCSV(m_leftSolver.matrixQ().toDense(), "Q1.csv");
@@ -513,7 +484,6 @@ namespace Eigen {
 #endif
 
 		RightBlockMatrixType J2(n1 + n2, m2);
-		std::cout << "J2(n1 + n2, m2) ... " << std::endl;
 		begin = clock();
 		solveRightBlock<BlockQRSolverRight, BlockQRSolverLeft, StorageIndex>(m1, m2, n1, n2, J2, mat, m_rightSolver, m_leftSolver);
 		std::cout << "solveRightBlock ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
@@ -521,9 +491,10 @@ namespace Eigen {
 		typename BlockQRSolverRight::PermutationType cp2 = m_rightSolver.colsPermutation();
 		typename BlockQRSolverRight::PermutationType rp2 = m_rightSolver.rowsPermutation();
 		const typename BlockQRSolverRight::MatrixRType& R2 = m_rightSolver.matrixR();
-		Eigen::MatrixXd Rut = m_rightSolver.matrixR().block(0, 0, R2.cols(), R2.cols());
+
+		Eigen::MatrixXd Rut = m_rightSolver.matrixR().block(0, 0, m2, m2);
 		Logger::instance()->logMatrixCSV(Rut, "R2.csv");
-		
+
 #ifdef OUTPUT_MAT
 //		Logger::instance()->logMatrixCSV(R2.toDense(), "R2.csv");
 //		Logger::instance()->logMatrixCSV(cp2.indices(), "cp2.csv");
@@ -544,8 +515,6 @@ namespace Eigen {
 //		Logger::instance()->logMatrixCSV(R22.toDense(), "R2.csv");
 #endif
 
-		//Eigen::MatrixXd J2top = J2.topRows(m1);
-
 		/// Compute R
 		/// R Matrix
 		/// R = | head(R1,m1) Atop*P2  |      m1 rows
@@ -556,7 +525,6 @@ namespace Eigen {
 		Logger::instance()->logMatrixCSV(m_R.toDense(), "R_final.csv");
 #endif
 
-		begin = clock();
 		// fill cols permutation
 		for (Index j = 0; j < m1; j++)
 			m_outputPerm_c.indices()(j, 0) = m_leftSolver.colsPermutation().indices()(j, 0);
@@ -574,7 +542,6 @@ namespace Eigen {
 			}
 			// Add bottom block row permutation
 		}
-		std::cout << "Set row&col perm ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 
 		m_nonzeropivots = m_leftSolver.rank() + m_rightSolver.rank();
 		m_isInitialized = true;

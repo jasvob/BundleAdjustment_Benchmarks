@@ -163,14 +163,14 @@ namespace Eigen {
 			// Analyze input matrix pattern and perform row and column permutations
 			// Stores input matrix to m_pmat
 			analyzePattern(mat);
-			std::cout << "Analp: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
+	//		std::cout << "Analp: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
 
 			// Create dense version of the already permuted input matrix
 			// It is much faster to do the permutations on the sparse version
 			beginFull = clock();
 			this->m_R = mat;// .toDense();
 
-			std::cout << "todense: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
+	//		std::cout << "todense: " << double(clock() - beginFull) / CLOCKS_PER_SEC << "s\n";
 			// And start factorizing block-by-block
 			Index solvedCols = 0;
 			Index cntr = 0;
@@ -185,7 +185,7 @@ namespace Eigen {
 				factorize(this->m_R);
 				solvedCols += this->denseBlockInfo.numCols;
 
-				std::cout << "Fact_" << cntr++ << ": " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+		//		std::cout << "Fact_" << cntr++ << ": " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 				//if (solvedCols > 1000)
 				//	break;
 			}
@@ -371,10 +371,14 @@ namespace Eigen {
 		std::string m_lastError;
 			
 		DenseMatrixType m_R;                // The triangular factor matrix
+		DenseMatrixType  m_pmatDense;	// Dense version of the input matrix - used for factorization (much faster than using sparse)
 		SparseBlockYTY m_blocksYT;		// Sparse block matrix storage holding the dense YTY blocks of the blocked representation of Householder reflectors.
 
 		PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
 		PermutationType m_rowPerm;
+		PermutationType m_houseColPerm;
+		std::vector<Index> m_nnzColPermIdxs;
+		std::vector<Index> m_zeroColPermIdxs;
 
 		RealScalar m_threshold;         // Threshold to determine null Householder reflections
 		bool m_useDefaultThreshold;     // Use default threshold

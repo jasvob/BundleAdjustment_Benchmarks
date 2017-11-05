@@ -117,7 +117,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	//typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > DenseBlockSolver;
 	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseBlockSolver> LeftSuperBlockSolver;
-	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<SparseDataType>, 4, true> RightSuperBlockSolver;
+	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<SparseDataType>, 10, true> RightSuperBlockSolver;
 	typedef BlockAngularSparseQR_Ext<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	//typedef SPQR<JacobianType> SchurlikeQRSolver;
 

@@ -202,13 +202,9 @@ namespace Eigen {
 		/************************* New more efficient QR solver **************************/
 		template <typename MatrixType, typename PermIndex>
 		void interleaveSparse(const MatrixType &R, const Matrix<Scalar, Dynamic, 1> &diag, const PermutationMatrix<Dynamic, Dynamic, PermIndex> &iPerm, MatrixType &res) {
-			std::cout << "3.9.2.0.0" << std::endl;
-			std::cout << "R rows x cols: " << R.rows() << " x " << R.cols() << std::endl;
 			res.resize(R.cols() * 2, R.cols());
-			std::cout << "Reserving ... " << R.nonZeros() + R.cols() << std::endl;
 			res.reserve(R.nonZeros() + R.cols()); // New matrix will contain R + diagonal
 
-			std::cout << "3.9.2.0.1" << std::endl;
 			// By default interleave 1 - 1 (can be changed by changing blocksz)
 			Index blocksz = 1;
 			Index stride = blocksz * 2;
@@ -229,7 +225,6 @@ namespace Eigen {
 					//}
 				}
 			}
-			std::cout << "3.9.2.0.2" << std::endl;
 			res.finalize();
 		}
 
@@ -257,47 +252,36 @@ namespace Eigen {
 			Index i, j, k, l;
 			Scalar temp;
 			Index n = s.cols();
-			Matrix<Scalar, Dynamic, 1>  wa(n);
+			Matrix<Scalar, Dynamic, 1>  wa(2 * n);
+			wa.head(n) = qtb;
 
 			// Compose the final matrix to be factorized by interleaving R and the diagonal
-			std::cout << "3.9.2.0" << std::endl;
 			FactorType RD;
 			interleaveSparse<FactorType, PermIndex>(s, diag, iPerm, RD);
-			std::cout << "3.9.2.1" << std::endl;
-
+		
 			//// Factorize the interleaved matrix to get "something" upper triangular again
 			QRSolver slvr;
 			Index leftBlockCols = qr.leftBlockCols();
 			Index rightBlockCols = RD.cols() - leftBlockCols;
-			std::cout << leftBlockCols << ", " << rightBlockCols << std::endl;
-			std::cout << "3.9.2.2" << std::endl;
 			slvr.setSparseBlockParams(RD.rows() - 2 * rightBlockCols, leftBlockCols);
 			slvr.getLeftSolver().setPattern(RD.rows() - 2 * rightBlockCols, leftBlockCols, 6, 3);
-			std::cout << "3.9.2.3" << std::endl;
 			slvr.compute(RD);
-			std::cout << "3.9.2.4" << std::endl;
 			
 			// awf moved here from 2nd last line below -- sdiag was not signalling rank deficiency in R (last 3 rows all zero)
 			sdiag = slvr.matrixR().diagonal().eval();
-			std::cout << "3.9.2.5" << std::endl;
-
+			
 			// Solve the triangular system for z. If the system is 
 			// singular, then obtain a least squares solution
 			Index nsing;
 			for (nsing = 0; nsing < n && sdiag(nsing) != 0; nsing++) {}
-			std::cout << "3.9.2.6" << std::endl;
-
+			
 			// Update qtb as well
-			wa = slvr.matrixQ().transpose() * qtb;
-			std::cout << "3.9.2.6" << std::endl;
-			wa.tail(n - nsing).setZero();
-			std::cout << "3.9.2.7" << std::endl;
+			wa = slvr.matrixQ().transpose() * wa;
+			wa.tail(2 * n - nsing).setZero();
 			wa.head(nsing) = slvr.matrixR().topLeftCorner(nsing, nsing).template triangularView<Upper>().solve/*InPlace*/(wa.head(nsing));
-			std::cout << "3.9.2.8" << std::endl;
-
+			
 			//// Permute the components of z back to components of x
-			x = iPerm * wa;
-			std::cout << "3.9.2.9" << std::endl;
+			x = iPerm * wa.head(n);
 		}
 	} // end namespace internal
 

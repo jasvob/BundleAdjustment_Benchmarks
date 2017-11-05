@@ -16,6 +16,47 @@ namespace Eigen {
 
 	namespace internal {
 
+		template <typename VecType, typename Scalar, typename Index, typename MatType>
+		void solveStep(const VecType &sdiag, const MatType &s, const Index nCols, Scalar &temp, VecType &wa1) {
+			for (Index j = 0; j < nCols; ++j) {
+				wa1[j] /= sdiag[j];
+				temp = wa1[j];
+				for (Index i = j + 1; i < nCols; ++i) {
+					wa1[i] -= s.coeff(i, j) * temp;
+				}
+			}
+			temp = wa1.blueNorm();
+		}
+
+		template <typename VecType, typename Scalar, typename Index>
+		void solveStep(const VecType &sdiag, const SparseMatrix<Scalar, RowMajor, Index> &s, const Index nCols, Scalar &temp, VecType &wa1) {
+			for (Index j = 0; j < nCols; ++j) {
+				wa1[j] /= sdiag[j];
+				temp = wa1[j];
+				for (SparseMatrix<Scalar, RowMajor, Index>::InnerIterator rowIt(s, j); rowIt; ++rowIt) {
+					if(rowIt.index() > j) {
+						wa1[rowIt.index()] -= rowIt.value() * temp;
+					}
+				}
+			}
+			temp = wa1.blueNorm();
+		}
+
+		template <typename VecType, typename Scalar, typename Index>
+		void solveStep(const VecType &sdiag, const SparseMatrix<Scalar, ColMajor, Index> &s, const Index nCols, Scalar &temp, VecType &wa1) {
+			SparseMatrix<Scalar, RowMajor, Index> srm(s);
+			for (Index j = 0; j < nCols; ++j) {
+				wa1[j] /= sdiag[j];
+				temp = wa1[j];
+				for (SparseMatrix<Scalar, RowMajor, Index>::InnerIterator rowIt(srm, j); rowIt; ++rowIt) {
+					if (rowIt.index() > j) {
+						wa1[rowIt.index()] -= rowIt.value() * temp;
+					}
+				}
+			}
+			temp = wa1.blueNorm();
+		}
+
 		template <typename QRSolver, typename VectorType>
 		void lmpar2(
 			const QRSolver &qr,
@@ -30,7 +71,7 @@ namespace Eigen {
 			using std::abs;
 			typedef typename QRSolver::MatrixType MatrixType;
 			typedef typename QRSolver::Scalar Scalar;
-			//typedef typename QRSolver::StorageIndex StorageIndex;
+			typedef typename QRSolver::StorageIndex StorageIndex;
 
 			/* Local variables */
 			Index j;
@@ -78,7 +119,6 @@ namespace Eigen {
 				return;
 			}
 
-			std::cout << "3.6" << std::endl;
 			/* if the jacobian is not rank deficient, the newton */
 			/* step provides a lower bound, parl, for the zero of */
 			/* the function. otherwise set this bound to zero. */
@@ -90,7 +130,6 @@ namespace Eigen {
 				parl = fp / m_delta / temp / temp;
 			}
 
-			std::cout << "3.7" << std::endl;
 			/* calculate an upper bound, paru, for the zero of the function. */
 			for (j = 0; j < n; ++j)
 				wa1[j] = s.col(j).head(j + 1).dot(qtb.head(j + 1)) / diag[qr.colsPermutation().indices()(j)];
@@ -109,29 +148,21 @@ namespace Eigen {
 				par = gnorm / dxnorm;
 			}
 
-			std::cout << "3.8" << std::endl;
 			/* beginning of an iteration. */
 			while (true) {
 				++iter;
 
 				/* evaluate the function at the current value of par. */
-				std::cout << "3.8.1" << std::endl;
 				if (par == 0.) {
 					par = (std::max)(dwarf, Scalar(.001) * paru); /* Computing MAX */
 				}
-				std::cout << "3.8.2" << std::endl;
 				wa1 = sqrt(par)* diag;
-				std::cout << "3.8.3" << std::endl;
-
-				std::cout << "3.9" << std::endl;
+		
 				VectorType sdiag(n);
-				std::cout << "3.9.1" << std::endl;
 				QRSolver::PermutationMatrixType pm = qr.colsPermutation();
-				std::cout << "3.9.2" << std::endl;
 				//PermutationMatrix<Dynamic, Dynamic, Index> pm = qr.colsPermutation(); // FixMe: Needed for SuiteSparseQR?
 				lmqrsolv2(qr, s, pm, wa1, qtb, x, sdiag);
 
-				std::cout << "3.10" << std::endl;
 				wa2 = diag.cwiseProduct(x);
 				dxnorm = wa2.blueNorm();
 				temp = fp;
@@ -144,21 +175,13 @@ namespace Eigen {
 					break;
 				}
 
-				std::cout << "3.11" << std::endl;
 				/* compute the newton correction. */
 				wa1 = qr.colsPermutation().inverse() * diag.cwiseProduct(wa2 / dxnorm);
 				// we could almost use this here, but the diagonal is outside qr, in sdiag[]
-				for (j = 0; j < n; ++j) {
-					wa1[j] /= sdiag[j];
-					temp = wa1[j];
-					for (Index i = j + 1; i < n; ++i) {
-						wa1[i] -= s.coeff(i, j) * temp;
-					}
-				}
-				temp = wa1.blueNorm();
+				solveStep<VectorType, Scalar, StorageIndex>(sdiag, s, n, temp, wa1);
+
 				parc = fp / m_delta / temp / temp;
 
-				std::cout << "3.12" << std::endl;
 				/* depending on the sign of the function, update parl or paru. */
 				if (fp > 0.) {
 					parl = (std::max)(parl, par);
