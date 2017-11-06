@@ -111,7 +111,7 @@ namespace Eigen {
 			Matrix<Scalar, Dynamic, 1> &x,
 			Matrix<Scalar, Dynamic, 1> &sdiag)
 		{
-			typedef SparseMatrix<Scalar, _Options, _Index>::Index Index;
+			typedef typename SparseMatrix<Scalar, _Options, _Index>::Index Index;
 			typedef SparseMatrix<Scalar, RowMajor, Index> FactorType;
 
 			/* Local variables */
@@ -212,7 +212,7 @@ namespace Eigen {
 				for (int j = 0; j < blocksz; j++) {
 					res.startVec(i * stride + j);
 					// Insert i-th row of the upper triangular part (stored in R)
-					for (MatrixType::InnerIterator rowIt(R, i * blocksz + j); rowIt; ++rowIt) {
+					for (typename MatrixType::InnerIterator rowIt(R, i * blocksz + j); rowIt; ++rowIt) {
 						res.insertBack(i * stride + j, rowIt.index()) = rowIt.value();
 					}
 				}
@@ -238,7 +238,7 @@ namespace Eigen {
 			Matrix<Scalar, Dynamic, 1> &x,
 			Matrix<Scalar, Dynamic, 1> &sdiag)
 		{
-			typedef SparseMatrix<Scalar, _Options, _Index>::Index Index;
+			typedef typename SparseMatrix<Scalar, _Options, _Index>::Index Index;
 			typedef SparseMatrix<Scalar, RowMajor, Index> FactorType;
 			typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
 
@@ -246,21 +246,22 @@ namespace Eigen {
 			typedef BlockDiagonalSparseQR_Ext<FactorType, DenseBlockSolver> LeftBlkSolver;
 			typedef DenseBlockedThinQR<DenseMatrix, NaturalOrdering<Index>, 10, true> RightBlkSolver;
 			typedef BlockAngularSparseQR_Ext<FactorType, LeftBlkSolver, RightBlkSolver> SchurlikeQRSolver;
-			typedef SchurlikeQRSolver QRSolver;
-
+			
 			/* Local variables */
 			Index i, j, k, l;
 			Scalar temp;
 			Index n = s.cols();
-			Matrix<Scalar, Dynamic, 1>  wa(2 * n);
-			wa.head(n) = qtb;
+			// Interleave qtb with vector of 0 (interleaved right side corresponding to interleaving R and lambdas on the left)
+			Matrix<Scalar, Dynamic, 1>  wa = Matrix<Scalar, Dynamic, 1>::Zero(2 * n);
+			Map<Matrix<Scalar, Dynamic, 1>, 0, InnerStride<2>>(wa.data(), n) = qtb;
+			//wa.head(n) = qtb;
 
 			// Compose the final matrix to be factorized by interleaving R and the diagonal
 			FactorType RD;
 			interleaveSparse<FactorType, PermIndex>(s, diag, iPerm, RD);
 		
 			//// Factorize the interleaved matrix to get "something" upper triangular again
-			QRSolver slvr;
+			static SchurlikeQRSolver slvr;
 			Index leftBlockCols = qr.leftBlockCols();
 			Index rightBlockCols = RD.cols() - leftBlockCols;
 			slvr.setSparseBlockParams(RD.rows() - 2 * rightBlockCols, leftBlockCols);
@@ -276,12 +277,16 @@ namespace Eigen {
 			for (nsing = 0; nsing < n && sdiag(nsing) != 0; nsing++) {}
 			
 			// Update qtb as well
+			wa.head(n) = slvr.colsPermutation() * wa.head(n);
 			wa = slvr.matrixQ().transpose() * wa;
 			wa.tail(2 * n - nsing).setZero();
 			wa.head(nsing) = slvr.matrixR().topLeftCorner(nsing, nsing).template triangularView<Upper>().solve/*InPlace*/(wa.head(nsing));
 			
 			//// Permute the components of z back to components of x
-			x = iPerm * wa.head(n);
+			wa.head(n) = slvr.colsPermutation().inverse() * wa.head(n);
+			//wa.head(n) = ;
+			Matrix<Scalar, Dynamic, 1> wa2 = Map<Matrix<Scalar, Dynamic, 1>, 0, InnerStride<2>>(wa.data(), n);
+			x = iPerm * wa2; //wa.head(n)
 		}
 	} // end namespace internal
 

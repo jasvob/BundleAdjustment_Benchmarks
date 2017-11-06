@@ -21,6 +21,7 @@
 #ifndef EIGEN_LEVENBERGMARQUARDT_H
 #define EIGEN_LEVENBERGMARQUARDT_H
 
+#include <unsupported/Eigen/NumericalDiff>
 
 namespace Eigen {
 	namespace LevenbergMarquardtSpace {
@@ -110,10 +111,10 @@ namespace Eigen {
 	{
 		typedef LevenbergMarquardtFunctor<_Scalar, NX, NY> Base;
 
-		typedef Matrix<Scalar, ValuesAtCompileTime, InputsAtCompileTime> JacobianType;
+		typedef Matrix<_Scalar, NX, NX> JacobianType;
 		typedef ColPivHouseholderQR<JacobianType> QRSolver;
 
-		DenseFunctor() : Base(InputsAtCompileTime, ValuesAtCompileTime) {}
+		DenseFunctor() : Base(NX, NY) {}
 		DenseFunctor(int inputs, int values) : Base(inputs, values) {}
 
 		void initQRSolver(QRSolver &) {}
@@ -128,7 +129,7 @@ namespace Eigen {
 
 		typedef _Index Index;
 
-		typedef SparseMatrix<Scalar, ColMajor, Index> JacobianType;
+		typedef SparseMatrix<_Scalar, ColMajor, _Index> JacobianType;
 		typedef SparseQR<JacobianType, COLAMDOrdering<int> > QRSolver;
 
 		SparseFunctor(Index inputs, Index values) : Base(inputs, values) {}
@@ -439,7 +440,7 @@ namespace Eigen {
 			return LevenbergMarquardtSpace::ImproperInputParameters;
 		}
 
-		NumericalDiff<FunctorType> numDiff(functor);
+        NumericalDiff<FunctorType> numDiff(functor);
 		// embedded LevenbergMarquardt
 		LevenbergMarquardt<NumericalDiff<FunctorType> > lm(numDiff);
 		lm.setFtol(tol);

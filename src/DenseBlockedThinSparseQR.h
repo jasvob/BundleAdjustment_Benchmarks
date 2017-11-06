@@ -107,16 +107,17 @@ namespace Eigen {
 		*/
 		template <typename IndexType>
 		struct BlockInfo {
-			IndexType idxDiag;
+			IndexType idxRow;
+			IndexType idxCol;
 			IndexType numRows;
 			IndexType numCols;
 
 			BlockInfo()
-				: idxDiag(0), numRows(0), numCols(0) {
+				: idxRow(0), idxCol(0), numRows(0), numCols(0) {
 			}
 
-			BlockInfo(const IndexType &diagIdx, const IndexType &nr, const IndexType &nc)
-				: idxDiag(diagIdx), numRows(nr), numCols(nc) {
+			BlockInfo(const IndexType &rowIdx, const IndexType &colIdx, const IndexType &nr, const IndexType &nc)
+				: idxRow(rowIdx), idxCol(colIdx), numRows(nr), numCols(nc) {
 			}
 		};
 
@@ -188,14 +189,17 @@ namespace Eigen {
 			Index solvedCols = 0;
 			Index cntr = 0;
 			// As long as there are some unsolved columns
+			Index newPivots = 0;
 			while (solvedCols < this->m_pmatDense.cols()) {
 				clock_t begin = clock();
 
 				// Get next block info
-				this->updateBlockInfo(solvedCols, this->m_pmat, _SuggestedBlockCols);
+				this->updateBlockInfo(solvedCols, this->m_pmat, newPivots, _SuggestedBlockCols);
 
 				// Factorize current block
+				newPivots = this->m_nonzeroPivots;
 				factorize(this->m_pmatDense);
+				newPivots = this->m_nonzeroPivots - newPivots;
 				solvedCols += this->denseBlockInfo.numCols;
 
 		//		std::cout << "Fact_" << cntr++ << ": " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
@@ -206,17 +210,19 @@ namespace Eigen {
 
 			// Set computed Householder column permutation
 			for (int c = 0; c < this->m_nnzColPermIdxs.size(); c++) {
-				this->m_houseColPerm.indices()(this->m_nnzColPermIdxs[c]) = c;
+				this->m_houseColPerm.indices()(c) = this->m_nnzColPermIdxs[c];
 			}
 			for (int c = 0; c < this->m_zeroColPermIdxs.size(); c++) {
-				this->m_houseColPerm.indices()(this->m_zeroColPermIdxs[c]) = this->m_nnzColPermIdxs.size() + c;
+				this->m_houseColPerm.indices()(this->m_nnzColPermIdxs.size() + c) = this->m_zeroColPermIdxs[c];
 			}
 
 			// Combine the two column permutation matrices together
-			this->m_outputPerm_c = this->m_houseColPerm * this->m_outputPerm_c;
+			this->m_outputPerm_c = this->m_outputPerm_c * this->m_houseColPerm;
 
 			// Don't forget to finalize m_R
 			m_R.finalize();
+		//	Logger::instance()->logMatrixCSV(m_R.toDense(), "2_R2.csv");
+		//	Logger::instance()->logMatrixCSV(m_pmatDense * this->m_houseColPerm, "2_fact.csv");
 
 			// m_pmatDense is now upper triangular (it is in fact the R)
 			/*RowMajorMatrixType rmR(m_pmatDense.rows(), m_pmatDense.cols());
@@ -225,10 +231,12 @@ namespace Eigen {
 			this->m_R = MatrixType(rmR).template triangularView<Upper>();
 			*/
 			//this->m_nonzeropivots = this->m_R.cols();
+            std::cout << "NNZ pivots: " << this->m_nonzeroPivots << std::endl;
+            
 			m_isInitialized = true;
 		}
 		void analyzePattern(const MatrixType& mat, bool rowPerm = true, bool colPerm = true);
-		void updateBlockInfo(const Index solvedCols, const MatrixType& mat, const Index blockCols = -1);
+		void updateBlockInfo(const Index solvedCols, const MatrixType& mat, const Index newPivots, const Index blockCols = -1);
 		void factorize(const DenseMatrixType& mat);
 
 		/** \returns the number of rows of the represented matrix.
@@ -497,8 +505,8 @@ namespace Eigen {
 			// Perform the actual row sorting if needed
 			if (this->m_hasRowPermutation) {
 				std::stable_sort(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
-					//return (lhs.start < rhs.start);
-					if (lhs.start < rhs.start) {
+					return (lhs.start < rhs.start);
+					/*if (lhs.start < rhs.start) {
 					return true;
 					}
 					else if (lhs.start == rhs.start) {
@@ -512,7 +520,7 @@ namespace Eigen {
 					}
 					else {
 					return false;
-					}
+					}*/
 				});
 			}
 
@@ -537,14 +545,14 @@ namespace Eigen {
 	}
 
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
-	void DenseBlockedThinSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::updateBlockInfo(const Index solvedCols, const MatrixType& mat, const Index blockCols) {
+	void DenseBlockedThinSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::updateBlockInfo(const Index solvedCols, const MatrixType& mat, const Index newPivots, const Index blockCols) {
 		Index newCols = (blockCols > 0) ? blockCols : SuggestedBlockCols;
 		Index colIdx = solvedCols + newCols;
 		Index numRows = 0;
 		if (colIdx >= m_pmat.cols()) {
 			colIdx = m_pmat.cols() - 1;
 			newCols = m_pmat.cols() - solvedCols;
-			numRows = m_pmat.rows() - solvedCols;
+			numRows = m_pmat.rows() - this->m_nonzeroPivots;
 		}
 		else {
 			typename MatrixType::StorageIndex biggestEndIdx = 0;
@@ -552,6 +560,9 @@ namespace Eigen {
 				//MatrixType::InnerIterator colIt(m_pmat, solvedCols + newCols - 1);
 				typename MatrixType::InnerIterator colIt(m_pmat, solvedCols + c);
 				typename MatrixType::StorageIndex endIdx = 0;// startIdx;
+				if (colIt) {
+					endIdx = colIt.index();
+				}
 				while (++colIt) { endIdx = colIt.index(); }	// FixMe: Is there a better way?
 
 				if (endIdx > biggestEndIdx) {
@@ -559,15 +570,19 @@ namespace Eigen {
 				}
 			}
 
-			numRows = biggestEndIdx - solvedCols + 1;
-			if (numRows < (this->denseBlockInfo.numRows - newCols)) {
+			numRows = biggestEndIdx - this->m_nonzeroPivots + 1;
+			if (numRows < (this->denseBlockInfo.numRows - newPivots)) {
 				// In the next step we need to process at least all the rows we did in the last one
 				// Even if the next block would be "shorter"
-				numRows = this->denseBlockInfo.numRows - newCols;
+				numRows = this->denseBlockInfo.numRows - newPivots;
 			}
 		}
 
-		this->denseBlockInfo = MatrixBlockInfo(solvedCols, numRows, newCols);
+		//if (this->m_nonzeroPivots + numRows > m_pmat.rows()) {
+		//	numRows = m_pmat.rows() - this->m_nonzeroPivots;
+		//}
+
+		this->denseBlockInfo = MatrixBlockInfo(this->m_nonzeroPivots, solvedCols, numRows, newCols);
 
 		//		std::cout << "Solving Dense block: " << this->denseBlockInfo.idxDiag << ", " << this->denseBlockInfo.numRows << ", " << this->denseBlockInfo.numCols
 		//			<< " of matrix size " << this->m_pmat.rows() - solvedCols << "x" << this->m_pmat.cols() - solvedCols << std::endl;
@@ -576,7 +591,7 @@ namespace Eigen {
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void DenseBlockedThinSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::updateMat(const Index &fromIdx, const Index &toIdx, DenseMatrixType &mat, const Index &blockK) {
 		// Now update the unsolved rest of m_pmat
-		typename SparseBlockYTY::Element blockYTY = this->m_blocksYT[this->m_blocksYT.size() - 1];
+		//typename SparseBlockYTY::Element blockYTY = this->m_blocksYT[this->m_blocksYT.size() - 1];
 
 		Index blockRows = this->m_blocksYT[blockK].value.rows();
 		///*
@@ -595,8 +610,8 @@ namespace Eigen {
 					{
 						// inner loop
 						{
-							mat.middleRows(this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows).col(fromIdx + j).noalias()
-								+= (this->m_blocksYT[blockK].value.Y() * (this->m_blocksYT[blockK].value.T().transpose() * (this->m_blocksYT[blockK].value.Y().transpose() * mat.middleRows(this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows).col(fromIdx + j))));
+							mat.middleRows(this->denseBlockInfo.idxRow, blockRows).col(fromIdx + j).noalias()
+								+= (this->m_blocksYT[blockK].value.Y() * (this->m_blocksYT[blockK].value.T().transpose() * (this->m_blocksYT[blockK].value.Y().transpose() * mat.middleRows(this->denseBlockInfo.idxRow, blockRows).col(fromIdx + j))));
 						}
 					}
 
@@ -632,25 +647,25 @@ namespace Eigen {
 		Eigen::ColPivHouseholderQR<DenseMatrixType> houseqr;
 
 		// Prepare the first block
-		DenseMatrixType Ji = m_pmatDense.block(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, this->denseBlockInfo.numRows, this->denseBlockInfo.numCols);
+		DenseMatrixType Ji = m_pmatDense.block(this->denseBlockInfo.idxRow, this->denseBlockInfo.idxCol, this->denseBlockInfo.numRows, this->denseBlockInfo.numCols);
 
 		/*********** Process the block ***********/
 		// 1) Factorize the block
 		houseqr.compute(Ji);
 
 	//	std::cout << "Rank: " << houseqr.rank() << std::endl;
+	//	std::cout << "----- Ji --------\n" << Ji.topRows(16) << "\n---------------------" << std::endl;
 
-		//std::cout << "----- MatrixQR --------\n" << houseqr.matrixQR() << "---------------------" << std::endl;
+	//	std::cout << "----- MatrixQR --------\n" << houseqr.matrixQR().topRows(16) << "\n---------------------" << std::endl;
 
 		// Update column permutation according to ColPivHouseholderQR
 		for (Index c = 0; c < houseqr.nonzeroPivots(); c++) {
-			this->m_nnzColPermIdxs.push_back(this->denseBlockInfo.idxDiag + houseqr.colsPermutation().indices()(c));
+			this->m_nnzColPermIdxs.push_back(this->denseBlockInfo.idxCol + houseqr.colsPermutation().indices()(c));
 		}
 		for (Index c = houseqr.nonzeroPivots(); c < this->denseBlockInfo.numCols; c++) {
-			this->m_zeroColPermIdxs.push_back(this->denseBlockInfo.idxDiag + houseqr.colsPermutation().indices()(c));
+			this->m_zeroColPermIdxs.push_back(this->denseBlockInfo.idxCol + houseqr.colsPermutation().indices()(c));
 		}
-		//this->m_houseColPerm.indices()(this->denseBlockInfo.idxDiag + c) = this->denseBlockInfo.idxDiag + houseqr.colsPermutation().indices()(c);
-
+	
 		// 2) Create matrices T and Y
 		Index numRows = this->denseBlockInfo.numRows;
 		//Index numCols = this->denseBlockInfo.numCols;
@@ -674,17 +689,30 @@ namespace Eigen {
 			T.col(bc) = z;
 			T(bc, bc) = -houseqr.hCoeffs()(bc);
 		}
+		// Colpermute Y and T
+		/*PermutationType colp;
+		colp.setIdentity(houseqr.nonzeroPivots());
+		for (int i = 0; i < houseqr.nonzeroPivots(); i++) {
+			colp.indices()(houseqr.colsPermutation().indices()(i)) = i;
+		}
+		Y = Y * colp;
+		T = T * colp;*/
 		// Save current Y and T. The block YTY contains a main diagonal and subdiagonal part separated by (numZeros) zero rows.
 		//	m_blocksYT.insert(typename SparseBlockYTY::Element(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, BlockYTY<Scalar, StorageIndex>(Y, T, 0)));
-		m_blocksYT.insert(typename SparseBlockYTY::Element(this->denseBlockInfo.idxDiag, this->denseBlockInfo.idxDiag, BlockYTY<Scalar, StorageIndex>(Y, T, 0)));
+		m_blocksYT.insert(typename SparseBlockYTY::Element(this->denseBlockInfo.idxRow, this->denseBlockInfo.idxCol, BlockYTY<Scalar, StorageIndex>(Y, T, 0)));
 
 		// Update the trailing columns of the matrix block
-		this->updateMat(this->denseBlockInfo.idxDiag, m_pmatDense.cols(), m_pmatDense, this->m_blocksYT.size() - 1);
+		this->updateMat(this->denseBlockInfo.idxCol, m_pmatDense.cols(), m_pmatDense, this->m_blocksYT.size() - 1);
 
 		// Add solved columns to R
-		// m_nonzeroPivots is telling us where is the current diagonal position
-		for (typename MatrixType::StorageIndex bc = 0; bc < numCols; bc++) {
+        // m_nonzeroPivots is telling us where is the current diagonal position
+        
+        // Don't forget to add the upper overlap (anything above the current diagonal element is already processed, but is part of R
+        for (typename MatrixType::StorageIndex bc = 0; bc < numCols; bc++) {
 			m_R.startVec(this->m_nonzeroPivots + bc);
+            for(typename MatrixType::StorageIndex br = 0; br < this->m_nonzeroPivots; br++) {
+                m_R.insertBack(br, this->m_nonzeroPivots + bc) = this->m_pmatDense(br, this->denseBlockInfo.idxCol + houseqr.colsPermutation().indices()(bc));
+            }
 			for (typename MatrixType::StorageIndex br = 0; br <= bc; br++) {
 				m_R.insertBack(this->m_nonzeroPivots + br, this->m_nonzeroPivots + bc) = houseqr.matrixQR()(br, bc);
 			}

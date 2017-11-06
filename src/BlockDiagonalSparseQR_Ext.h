@@ -295,6 +295,10 @@ namespace Eigen {
 		BlockInfoMap m_blockMap;		// Sparse matrix block information
 		BlockInfoMapOrder m_blockOrder; // Sparse matrix block order
 
+        std::string m_lastError;
+        bool m_useDefaultThreshold;
+        Scalar m_threshold;
+        
 		void mergeBlocks(BlockInfoMapOrder &blockOrder, BlockInfoMap &blockMap, const StorageIndex maxColStep);
 	};
 
@@ -332,10 +336,10 @@ namespace Eigen {
 		BlockInfoMap newBlockMap;
 		BlockInfoMapOrder newBlockOrder;
 		MatrixBlockInfo firstBlock;
-		MatrixType::StorageIndex prevBlockEndCol = 0;
-		MatrixType::StorageIndex sumRows = 0;
-		MatrixType::StorageIndex numCols = 0;
-		MatrixType::StorageIndex colStep = 0;
+		typename MatrixType::StorageIndex prevBlockEndCol = 0;
+		typename MatrixType::StorageIndex sumRows = 0;
+		typename MatrixType::StorageIndex numCols = 0;
+		typename MatrixType::StorageIndex colStep = 0;
 		auto it = blockOrder.begin();
 		for (; it != blockOrder.end(); ++it) {
 			if (sumRows == 0) {
@@ -393,9 +397,9 @@ namespace Eigen {
 	template <typename MatrixType, typename BlockQRSolver>
 	void BlockDiagonalSparseQR_Ext<MatrixType, BlockQRSolver>::setPattern(const StorageIndex matRows, const StorageIndex matCols,
 		const StorageIndex blockRows, const StorageIndex blockCols) {
-		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
-		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
-		typedef SparseMatrix<Scalar, RowMajor, MatrixType::StorageIndex> RowMajorMatrixType;
+		typedef RowRange<typename MatrixType::StorageIndex> MatrixRowRange;
+		typedef std::map<typename MatrixType::StorageIndex, typename MatrixType::StorageIndex> BlockBandSize;
+		typedef SparseMatrix<Scalar, RowMajor, typename MatrixType::StorageIndex> RowMajorMatrixType;
 
 		Index n = matCols;
 		Index m = matRows;
@@ -408,12 +412,12 @@ namespace Eigen {
 
 		/******************************************************************/
 		// 1) Set the block map based on block paramters passed ot this method	
-		MatrixType::StorageIndex numBlocks = n / blockCols;
+		typename MatrixType::StorageIndex numBlocks = n / blockCols;
 		this->m_blockMap.clear();
 		this->m_blockOrder.clear();
 		this->m_numNonZeroQ = 0;
-		MatrixType::StorageIndex rowIdx = 0;
-		MatrixType::StorageIndex colIdx = 0;
+		typename MatrixType::StorageIndex rowIdx = 0;
+		typename MatrixType::StorageIndex colIdx = 0;
 		for (int i = 0; i < numBlocks; i++) {
 			rowIdx = i * blockRows;
 			colIdx = i * blockCols;
@@ -443,9 +447,9 @@ namespace Eigen {
 	template <typename MatrixType, typename BlockQRSolver>
 	void BlockDiagonalSparseQR_Ext<MatrixType, BlockQRSolver>::analyzePattern(const MatrixType& mat)
 	{
-		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
-		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
-		typedef SparseMatrix<Scalar, RowMajor, MatrixType::StorageIndex> RowMajorMatrixType;
+		typedef RowRange<typename MatrixType::StorageIndex> MatrixRowRange;
+		typedef std::map<typename MatrixType::StorageIndex, typename MatrixType::StorageIndex> BlockBandSize;
+		typedef SparseMatrix<Scalar, RowMajor, typename MatrixType::StorageIndex> RowMajorMatrixType;
 
 		Index n = mat.cols();
 		Index m = mat.rows();
@@ -457,14 +461,14 @@ namespace Eigen {
 		BlockBandSize bandWidths, bandHeights;
 		RowMajorMatrixType rmMat(mat);
 		std::vector<MatrixRowRange> rowRanges;
-		for (MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
-			RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
-			MatrixType::StorageIndex startIdx = rowIt.index();
-			MatrixType::StorageIndex endIdx = startIdx;
+		for (typename MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
+			typename RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
+			typename MatrixType::StorageIndex startIdx = rowIt.index();
+			typename MatrixType::StorageIndex endIdx = startIdx;
 			while (++rowIt) { endIdx = rowIt.index(); }	// FixMe: Is there a better way?
 			rowRanges.push_back(MatrixRowRange(j, startIdx, endIdx));
 
-			MatrixType::StorageIndex bw = endIdx - startIdx + 1;
+			typename MatrixType::StorageIndex bw = endIdx - startIdx + 1;
 			if (bandWidths.find(startIdx) == bandWidths.end()) {
 				bandWidths.insert(std::make_pair(startIdx, bw));
 			}
@@ -506,8 +510,8 @@ namespace Eigen {
 
 		/******************************************************************/
 		// 3) Search for banded blocks (blocks of row sharing same/similar band)		
-		MatrixType::StorageIndex maxColStep = 0;
-		for (MatrixType::StorageIndex j = 0; j < rowRanges.size() - 1; j++) {
+		typename MatrixType::StorageIndex maxColStep = 0;
+		for (typename MatrixType::StorageIndex j = 0; j < rowRanges.size() - 1; j++) {
 			if ((rowRanges.at(j + 1).start - rowRanges.at(j).start) > maxColStep) {
 				maxColStep = (rowRanges.at(j + 1).start - rowRanges.at(j).start);
 			}
@@ -517,8 +521,8 @@ namespace Eigen {
 		this->m_numNonZeroQ = 0;
 		this->m_blockMap.clear();
 		this->m_blockOrder.clear();
-		Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
-		MatrixType::StorageIndex rowIdx = 0;
+		Eigen::Matrix<typename MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
+		typename MatrixType::StorageIndex rowIdx = 0;
 		for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
 			permIndices(it->origIdx) = rowIdx;
 
@@ -595,7 +599,7 @@ namespace Eigen {
 		// Permute the input matrix using the precomputed row permutation
 		m_pmat = (this->m_rowPerm * mat);
 
-		typedef MatrixType::Index Index;
+		typedef typename MatrixType::Index Index;
 
 		Index numBlocks = this->m_blockOrder.size();
 		Index rank = 0;

@@ -162,15 +162,15 @@ const Eigen::Vector3d& CameraMatrix::getCameraCenter() const {
 	return this->m_center;
 }
 
-const Eigen::Vector3d& CameraMatrix::opticalAxis() const {
+const Eigen::Vector3d CameraMatrix::opticalAxis() const {
 	return this->transformDirectionFromCameraSpace(Eigen::Vector3d(0.0, 0.0, 1.0));
 }
 
-const Eigen::Vector3d& CameraMatrix::upVector() const {
+const Eigen::Vector3d CameraMatrix::upVector() const {
 	return this->transformDirectionFromCameraSpace(Eigen::Vector3d(0.0, 1.0, 0.0));
 }
 
-const Eigen::Vector3d& CameraMatrix::rightVector() const {
+const Eigen::Vector3d CameraMatrix::rightVector() const {
 	return this->transformDirectionFromCameraSpace(Eigen::Vector3d(1.0, 0.0, 0.0));
 }
 
@@ -182,7 +182,7 @@ bool CameraMatrix::isOnGoodSide(const Eigen::Vector3d& p) const {
 	return this->transformPointIntoCameraSpace(p)(2) > 0;
 }
 
-const Matrix3x4d& CameraMatrix::getExtrinsic() const {
+const Matrix3x4d CameraMatrix::getExtrinsic() const {
 	Matrix3x4d RT;
 	RT.leftCols(3) = this->m_R;
 	RT.col(3) = this->m_T;
@@ -190,7 +190,7 @@ const Matrix3x4d& CameraMatrix::getExtrinsic() const {
 	return RT;
 }
 
-const Matrix3x4d& CameraMatrix::getOrientation() const {
+const Matrix3x4d CameraMatrix::getOrientation() const {
 	Matrix3x4d RT;
 	RT.leftCols(3) = this->m_R;
 	RT.col(3) = this->m_T;
@@ -212,7 +212,7 @@ double CameraMatrix::getAspectRatio() const {
 	return this->m_K(1, 1) / this->m_K(0, 0);
 }
 
-Eigen::Vector2d& CameraMatrix::getPrincipalPoint() const {
+Eigen::Vector2d CameraMatrix::getPrincipalPoint() const {
 	return Eigen::Vector2d(this->m_K(0, 2), this->m_K(1, 2));
 }
 

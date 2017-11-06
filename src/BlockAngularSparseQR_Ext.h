@@ -371,7 +371,7 @@ namespace Eigen {
 			// Columns of R1
 			for (int c = 0; c < m1; c++) {
 				Rout.startVec(c);
-				for (SparseMatrix<Scalar, ColMajor, StorageIndex>::InnerIterator colIt(R1, c); colIt; ++colIt) {
+				for (typename SparseMatrix<Scalar, ColMajor, StorageIndex>::InnerIterator colIt(R1, c); colIt; ++colIt) {
 					Rout.insertBack(colIt.index(), c) = colIt.value();
 				}
 			}
@@ -398,7 +398,7 @@ namespace Eigen {
 			// Columns of R1
 			for (int c = 0; c < m1; c++) {
 				Rout.startVec(c);
-				for (SparseMatrix<Scalar, ColMajor, StorageIndex>::InnerIterator colIt(R1, c); colIt; ++colIt) {
+				for (typename SparseMatrix<Scalar, ColMajor, StorageIndex>::InnerIterator colIt(R1, c); colIt; ++colIt) {
 					Rout.insertBack(colIt.index(), c) = colIt.value();
 				}
 			}
@@ -411,7 +411,7 @@ namespace Eigen {
 				for (int r = 0; r < m1; r++) {
 					Rout.insertBack(r, m1 + c) = J2top(r, rightSolver.colsPermutation().indices()(c));
 				}
-				for (SparseMatrix<Scalar, ColMajor, StorageIndex>::InnerIterator colIt(R2, c); colIt; ++colIt) {
+				for (typename SparseMatrix<Scalar, ColMajor, StorageIndex>::InnerIterator colIt(R2, c); colIt; ++colIt) {
 					Rout.insertBack(m1 + colIt.index(), m1 + c) = colIt.value();
 				}
 			}
@@ -427,6 +427,13 @@ namespace Eigen {
 		J2.bottomRows(n2) = mat.block(n1, m1, n2, m2);
 
 		rightSolver.compute(J2.bottomRows(n1 + n2 - m1));
+
+	//	MatType J2botPerm = rightSolver.rowsPermutation() * J2.bottomRows(n1 + n2 - m1);
+	//	J2botPerm = J2botPerm * rightSolver.colsPermutation();
+	//	SparseMatrix<Scalar> J2botPermSp = J2botPerm.sparseView();
+	//	SparseMatrix<Scalar> R2sp = rightSolver.matrixR().sparseView();
+	//	std::cout << "Q * R - J = " << (rightSolver.matrixQ() * R2sp - J2botPermSp).norm() << std::endl;
+	//	std::cout << "Q.T * J - R = " << (rightSolver.matrixQ().transpose() * J2botPermSp - R2sp).norm() << std::endl;
 	}
 
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex>
@@ -438,6 +445,12 @@ namespace Eigen {
 		
 		SparseMatrix<Scalar> J2bot = J2.bottomRows(n1 - m1);
 		rightSolver.compute(J2bot);
+
+		// Verify correctness of the qr decomposition
+		//SparseMatrix<Scalar> J2botPerm = rightSolver.rowsPermutation() * J2bot;
+		//J2botPerm = J2botPerm * rightSolver.colsPermutation();
+		//std::cout << "Q * R - J = " << (rightSolver.matrixQ() * rightSolver.matrixR() - J2botPerm).norm() << std::endl;
+		//std::cout << "Q.T * J - R = " << (rightSolver.matrixQ().transpose() * J2botPerm - rightSolver.matrixR()).norm() << std::endl;
 	}
 	/*********************************************************************************************************/
 
@@ -456,7 +469,7 @@ namespace Eigen {
 		clock_t begin = clock();
 
 		typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
-		typedef MatrixType::Index Index;
+		typedef typename MatrixType::Index Index;
 		Index m1 = m_blockCols;
 		Index m2 = mat.cols() - m_blockCols;
 		Index n1 = m_blockRows;
@@ -492,8 +505,8 @@ namespace Eigen {
 		typename BlockQRSolverRight::PermutationType rp2 = m_rightSolver.rowsPermutation();
 		const typename BlockQRSolverRight::MatrixRType& R2 = m_rightSolver.matrixR();
 
-		Eigen::MatrixXd Rut = m_rightSolver.matrixR().block(0, 0, m2, m2);
-		Logger::instance()->logMatrixCSV(Rut, "R2.csv");
+	//	Eigen::MatrixXd Rut = m_rightSolver.matrixR().block(0, 0, m2, m2);
+	//	Logger::instance()->logMatrixCSV(Rut, "R2.csv");
 
 #ifdef OUTPUT_MAT
 //		Logger::instance()->logMatrixCSV(R2.toDense(), "R2.csv");

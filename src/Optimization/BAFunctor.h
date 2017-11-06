@@ -57,6 +57,8 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 		Index nDistortions() const { return distortions.size(); }
 		Index nDataPoints() const { return data_points.cols(); }
 		Index nWeights() const { return weights.size(); }
+
+		typedef SparseDataType Index;
 	};
 
 	// And the optimization steps are computed using VectorType.
@@ -140,7 +142,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 		// Now the transformation from world coords into camera space is xx = Rx + T
 		// Hence the derivative of x wrt. T is just the identity matrix
 		d_dRT.setIdentity();
-		d_dRT.leftCols(3) = J;
+		d_dRT.rightCols(3) = J;
 
 		// The derivative of Rx + t wrt x is just R
 		d_dX = cam.getRotation();
@@ -149,17 +151,45 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	/************ ENERGIES, GRADIENTS and UPDATES ************/
 	/************ ENERGIES ************/
 	// Residual wrt to 3d points
+	inline double psi(const double tau2, const double r2) {
+		double const r4 = r2*r2, tau4 = tau2*tau2;
+		return (r2 < tau2) ? r2*(3.0 - 3 * r2 / tau2 + r4 / tau4) / 6.0f : tau2 / 6.0;
+	}
+
+	inline double psi_weight(double const tau2, double const r2) {
+		return sqr(std::max(0.0, 1.0 - r2 / tau2));
+	}
+
+	inline double psi_hat(double const tau2, double const r2, double const w2) {
+		double const w = sqrt(w2);
+		return w2*r2 + tau2 / 3.0*sqr(w - 1)*(2 * w + 1);
+	}
+
+	Vector2d projectPoint(const CameraMatrix &cam, const DistortionFunction &distortion, const Vector3d &X) {
+		Vector3d XX = cam.transformDirectionIntoCameraSpace(X);
+		Vector2d xu(XX(0) / XX(2), XX(1) / XX(2));
+		Vector2d xd = distortion(xu);
+		return cam.getFocalLength() * xd;
+	}
+
+	const double eps_psi_residual = 1e-20;
 	void E_pos(const InputType& x, const Eigen::Matrix2Xd& measurements, const std::vector<int> &correspondingView, const std::vector<int> &correspondingPoint, ValueType& fvec) {
-		
+		double sqrInlierThreshold = this->inlierThreshold * this->inlierThreshold;
+
 		for (int i = 0; i < this->nMeasurements(); i++) {
 			int view = correspondingView[i];
 			int point = correspondingPoint[i];
 
 			// Project 3D point into corresponding camera view
-			Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			//Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			Eigen::Vector2d r = (q - measurements.col(i));
+
+			double sqrt_psi = sqrt(psi(sqrInlierThreshold, r.squaredNorm()));
+			double rnorm_r = 1.0 / std::max(eps_psi_residual, r.norm());
 
 			// Compute residual for the point
-			fvec.segment<2>(i * 2) = q - measurements.col(i);
+			fvec.segment<2>(i * 2) = Eigen::Vector2d(sqrt_psi * rnorm_r, sqrt_psi * rnorm_r);
 			//fvec.segment<2>(point * x.nCameras() + view) = q - measurements.col(i);
 		}
 	}
@@ -199,7 +229,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 
 			double focalLength = x.cams[view].getFocalLength();
 
-			Eigen::Matrix2d dp_dxd = Eigen::Matrix2d::Zero();;
+			Eigen::Matrix2d dp_dxd = Eigen::Matrix2d::Zero();
 			dp_dxd(0, 0) = focalLength;
 			dp_dxd(1, 1) = focalLength;
 
@@ -211,47 +241,100 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			Eigen::Matrix2d dp_dxu = dp_dxd * dxd_dxu;
 			Matrix2x3d dp_dXX = dp_dxu * dxu_dXX;
 
+			// Compute outer derivative from psi residual
+			double sqrInlierThreshold = this->inlierThreshold * this->inlierThreshold;
+			//const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			const Vector2d r = q - measurements.col(i);
+			const double r2 = r.squaredNorm();
+			const double W = psi_weight(sqrInlierThreshold, r2);
+			const double sqrt_psi = sqrt(psi(sqrInlierThreshold, r2));
+			const double rsqrt_psi = 1.0 / std::max(eps_psi_residual, sqrt_psi);
+
+			Matrix2d outer_deriv, r_rt, rI;
+			const double rcp_r2 = 1.0 / std::max(eps_psi_residual, r2);
+			const double rnorm_r = 1.0 / std::max(eps_psi_residual, sqrt(r2));
+			r_rt = r * r.transpose(); r_rt *= rnorm_r;
+			rI.setIdentity(); rI *= sqrt(r2);
+			outer_deriv = W / 2.0 * rsqrt_psi * r_rt + sqrt_psi * rcp_r2 * (rI - r_rt);
+
 			// Prepare Jacobian block
-			//Eigen::MatrixXd Jblock = Eigen::MatrixXd::Zero(2, 10 + 3);	// 10 camera params + xyz 3d point coords
+			Eigen::MatrixXd Jblock = Eigen::MatrixXd::Zero(2, 10 + 3);	// 10 camera params + xyz 3d point coords
 
 			// Set deriv wrt camera parameters
 			Eigen::Matrix2d dxd_dk1k2 = x.distortions[view].derivativeWrtRadialParameters(xu);
 			Eigen::Matrix2d d_dk1k2 = dp_dxd * dxd_dk1k2;
-			//Jblock.block<2, 2>(0, 7) = d_dk1k2;
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(0, 0));
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 1, d_dk1k2(0, 1));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(1, 0));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 1, d_dk1k2(1, 1));
+			Jblock.block<2, 2>(0, 7) = d_dk1k2;
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(0, 0));
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 1, d_dk1k2(0, 1));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(1, 0));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 1, d_dk1k2(1, 1));
 
-			//Jblock.col(6) = xd;
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + focalLengthOffset, xd(0));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + focalLengthOffset, xd(1));
+			Jblock.col(6) = xd;
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + focalLengthOffset, xd(0));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + focalLengthOffset, xd(1));
 
 			Matrix2x6d dp_dRT = dp_dXX * dXX_dRT;
-			//Jblock.block<2, 6>(0, 0) = dp_dRT;
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 0, dp_dRT(0, 0));
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 1, dp_dRT(0, 1));
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 2, dp_dRT(0, 2));
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 3, dp_dRT(0, 3));
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 4, dp_dRT(0, 4));
-			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 5, dp_dRT(0, 5));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 0, dp_dRT(1, 0));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 1, dp_dRT(1, 1));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 2, dp_dRT(1, 2));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 3, dp_dRT(1, 3));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 4, dp_dRT(1, 4));
-			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 5, dp_dRT(1, 5));
+			Jblock.block<2, 6>(0, 0) = dp_dRT;
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 0, dp_dRT(0, 0));
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 1, dp_dRT(0, 1));
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 2, dp_dRT(0, 2));
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 3, dp_dRT(0, 3));
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 4, dp_dRT(0, 4));
+			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 5, dp_dRT(0, 5));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 0, dp_dRT(1, 0));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 1, dp_dRT(1, 1));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 2, dp_dRT(1, 2));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 3, dp_dRT(1, 3));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 4, dp_dRT(1, 4));
+			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 5, dp_dRT(1, 5));
 
 			// Set deriv wrt 3d points
-			//Jblock.block<2, 3>(0, 10) = dp_dXX * dXX_dX;
-			Matrix2x3d dp_dX = dp_dXX * dXX_dX;
-			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 0, dp_dX(0, 0));
-			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 1, dp_dX(0, 1));
-			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 2, dp_dX(0, 2));
-			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 0, dp_dX(1, 0));
-			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 1, dp_dX(1, 1));
-			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 2, dp_dX(1, 2));
+			Jblock.block<2, 3>(0, 10) = dp_dXX * dXX_dX;
+			//Matrix2x3d dp_dX = dp_dXX * dXX_dX;
+			//jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 0, dp_dX(0, 0));
+			//jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 1, dp_dX(0, 1));
+			//jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 2, dp_dX(0, 2));
+			//jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 0, dp_dX(1, 0));
+			//jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 1, dp_dX(1, 1));
+			//jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 2, dp_dX(1, 2));
+
 			//std::cout << i * 2 << ", " << pt_base + point * numPointCoords << ":\n" << dp_dX << "----" << std::endl;
+	
+			// Multiply block with outer deriv
+			Jblock = outer_deriv * Jblock;
+
+			// Fill into the Jacobian
+			// Set deriv wrt camera parameters
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 0, Jblock(0, 7));
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 1, Jblock(0, 8));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 0, Jblock(1, 7));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 1, Jblock(1, 8));
+
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + focalLengthOffset, Jblock(0, 6));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + focalLengthOffset, Jblock(1, 6));
+
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 0, Jblock(0, 0));
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 1, Jblock(0, 1));
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 2, Jblock(0, 2));
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 3, Jblock(0, 3));
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 4, Jblock(0, 4));
+			jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 5, Jblock(0, 5));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 0, Jblock(1, 0));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 1, Jblock(1, 1));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 2, Jblock(1, 2));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 3, Jblock(1, 3));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 4, Jblock(1, 4));
+			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 5, Jblock(1, 5));
+
+			// Set deriv wrt 3d points
+			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 0, Jblock(0, 10));
+			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 1, Jblock(0, 11));
+			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 2, Jblock(0, 12));
+			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 0, Jblock(1, 10));
+			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 1, Jblock(1, 11));
+			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 2, Jblock(1, 12));
+
 
 			/*
 			jvals.add(point * x.nCameras() + view + 0, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(0, 0));

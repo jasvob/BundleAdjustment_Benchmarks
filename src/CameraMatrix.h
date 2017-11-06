@@ -37,18 +37,18 @@ public:
 	double getHeight() const;
 	const Eigen::Vector3d& getCameraCenter() const;
 
-	const Eigen::Vector3d& opticalAxis() const;
-	const Eigen::Vector3d& upVector() const;
-	const Eigen::Vector3d& rightVector() const;
+	const Eigen::Vector3d opticalAxis() const;
+	const Eigen::Vector3d upVector() const;
+	const Eigen::Vector3d rightVector() const;
 
-	const Matrix3x4d& getExtrinsic() const;
-	const Matrix3x4d& getOrientation() const;
+	const Matrix3x4d getExtrinsic() const;
+	const Matrix3x4d getOrientation() const;
 	const Matrix3x4d getProjection() const;
 
 	double getFocalLength() const;
 	double getAspectRatio() const;
 
-	Eigen::Vector2d& getPrincipalPoint() const;
+	Eigen::Vector2d getPrincipalPoint() const;
 	Eigen::Vector2d projectPoint(const Eigen::Vector3d& X) const;
 	Eigen::Vector2d projectPoint(const DistortionFunction &distortion, const Eigen::Vector3d &X) const;
 	Eigen::Vector3d unprojectPixel(const Eigen::Vector2d &p, double depth = 1) const;

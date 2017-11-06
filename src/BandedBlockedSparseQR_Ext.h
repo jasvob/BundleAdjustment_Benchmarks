@@ -359,7 +359,7 @@ namespace Eigen {
 	* Stores original row index (before any row reordering was performed),
 	* index of the first nonzero (start) and last nonzero(end) in the band and the band length (length).
 	*/
-	/*
+	
 	template <typename IndexType>
 	struct RowRange {
 		IndexType origIdx;
@@ -375,7 +375,7 @@ namespace Eigen {
 			this->length = this->end - this->start + 1;
 		}
 	};
-	*/
+	
 	/*
 	* Helper function going through a block map and looking for a possibility to merge several blocks together
 	* in order to obtain better dense block sizes for the YTY representation.
@@ -385,10 +385,10 @@ namespace Eigen {
 		BlockInfoMap newBlockMap;
 		BlockInfoMapOrder newBlockOrder;
 		MatrixBlockInfo firstBlock;
-		MatrixType::StorageIndex prevBlockEndCol = 0;
-		MatrixType::StorageIndex sumRows = 0;
-		MatrixType::StorageIndex numCols = 0;
-		MatrixType::StorageIndex colStep = 0;
+		typename MatrixType::StorageIndex prevBlockEndCol = 0;
+		typename MatrixType::StorageIndex sumRows = 0;
+		typename MatrixType::StorageIndex numCols = 0;
+		typename MatrixType::StorageIndex colStep = 0;
 		auto it = blockOrder.begin();
 		for (; it != blockOrder.end(); ++it) {
 			if (sumRows == 0) {
@@ -446,9 +446,9 @@ namespace Eigen {
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void BandedBlockedSparseQR_Ext<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::setPattern(const StorageIndex matRows, const StorageIndex matCols,
 		const StorageIndex blockRows, const StorageIndex blockCols, const StorageIndex blockOverlap) {
-		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
-		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
-		typedef SparseMatrix<Scalar, RowMajor, MatrixType::StorageIndex> RowMajorMatrixType;
+		typedef RowRange<typename MatrixType::StorageIndex> MatrixRowRange;
+		typedef std::map<typename MatrixType::StorageIndex, typename MatrixType::StorageIndex> BlockBandSize;
+		typedef SparseMatrix<Scalar, RowMajor, typename MatrixType::StorageIndex> RowMajorMatrixType;
 
 		Index n = matCols;
 		Index m = matRows;
@@ -461,12 +461,12 @@ namespace Eigen {
 
 		/******************************************************************/
 		// 1) Set the block map based on block paramters passed ot this method	
-		MatrixType::StorageIndex maxColStep = blockCols - blockOverlap;
-		MatrixType::StorageIndex numBlocks = n / maxColStep;
+		typename MatrixType::StorageIndex maxColStep = blockCols - blockOverlap;
+		typename MatrixType::StorageIndex numBlocks = n / maxColStep;
 		this->m_blockMap.clear();
 		this->m_blockOrder.clear();
-		MatrixType::StorageIndex rowIdx = 0;
-		MatrixType::StorageIndex colIdx = 0;
+		typename MatrixType::StorageIndex rowIdx = 0;
+		typename MatrixType::StorageIndex colIdx = 0;
 		for (int i = 0; i < numBlocks; i++) {
 			rowIdx = i * blockRows;
 			colIdx = i * maxColStep;
@@ -506,9 +506,9 @@ namespace Eigen {
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void BandedBlockedSparseQR_Ext<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::analyzePattern(const MatrixType& mat)
 	{
-		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
-		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
-		typedef SparseMatrix<Scalar, RowMajor, MatrixType::StorageIndex> RowMajorMatrixType;
+		typedef RowRange<typename MatrixType::StorageIndex> MatrixRowRange;
+		typedef std::map<typename MatrixType::StorageIndex, typename MatrixType::StorageIndex> BlockBandSize;
+		typedef SparseMatrix<Scalar, RowMajor, typename MatrixType::StorageIndex> RowMajorMatrixType;
 
 		Index n = mat.cols();
 		Index m = mat.rows();
@@ -520,14 +520,14 @@ namespace Eigen {
 		//BlockBandSize bandWidths, bandHeights;
 		RowMajorMatrixType rmMat(mat);
 		std::vector<MatrixRowRange> rowRanges;
-		for (MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
-			RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
-			MatrixType::StorageIndex startIdx = rowIt.index();
-			MatrixType::StorageIndex endIdx = startIdx;
+		for (typename MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
+			typename RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
+			typename MatrixType::StorageIndex startIdx = rowIt.index();
+			typename MatrixType::StorageIndex endIdx = startIdx;
 			while (++rowIt) { endIdx = rowIt.index(); }	// FixMe: Is there a better way?
 			rowRanges.push_back(MatrixRowRange(j, startIdx, endIdx));
 			/*
-			MatrixType::StorageIndex bw = endIdx - startIdx + 1;
+			typename MatrixType::StorageIndex bw = endIdx - startIdx + 1;
 			if (bandWidths.find(startIdx) == bandWidths.end()) {
 				bandWidths.insert(std::make_pair(startIdx, bw));
 			}
@@ -572,9 +572,9 @@ namespace Eigen {
 		// And record the estimated block structure
 		this->m_blockMap.clear();
 		this->m_blockOrder.clear();
-		Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
-		MatrixType::StorageIndex rowIdx = 0;
-		MatrixType::StorageIndex lastStart = rowRanges.at(0).start;
+		Eigen::Matrix<typename MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
+		typename MatrixType::StorageIndex rowIdx = 0;
+		typename MatrixType::StorageIndex lastStart = rowRanges.at(0).start;
 		bool skipDense = false;
 		for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
 			permIndices(it->origIdx) = rowIdx;
@@ -611,14 +611,14 @@ namespace Eigen {
 		BlockBandSize bandWidths, bandHeights;
 		MatrixType spBlock = m_pmat.block(0, 0, this->m_denseStartRow, m_pmat.cols());
 		std::vector<MatrixRowRange> colRanges;
-		for (MatrixType::StorageIndex j = 0; j < spBlock.cols(); j++) {
-			MatrixType::InnerIterator colIt(spBlock, j);
-			MatrixType::StorageIndex startIdx = colIt.index();
-			MatrixType::StorageIndex endIdx = startIdx;
+		for (typename MatrixType::StorageIndex j = 0; j < spBlock.cols(); j++) {
+			typename MatrixType::InnerIterator colIt(spBlock, j);
+			typename MatrixType::StorageIndex startIdx = colIt.index();
+			typename MatrixType::StorageIndex endIdx = startIdx;
 			while (++colIt) { endIdx = colIt.index(); }	// FixMe: Is there a better way?
 			colRanges.push_back(MatrixRowRange(j, startIdx, endIdx));
 
-			MatrixType::StorageIndex bw = endIdx - startIdx + 1;
+			typename MatrixType::StorageIndex bw = endIdx - startIdx + 1;
 			if (bandWidths.find(startIdx) == bandWidths.end()) {
 				bandWidths.insert(std::make_pair(startIdx, bw));
 			}
@@ -639,7 +639,7 @@ namespace Eigen {
 		// Compose block map
 		this->m_blockMap.clear();
 		this->m_blockOrder.clear();
-		MatrixType::StorageIndex colIdx = 0;
+		typename MatrixType::StorageIndex colIdx = 0;
 		for (auto it = colRanges.begin(); it != colRanges.end(); ++it, colIdx++) {
 			// std::find is terribly slow for large arrays
 			// assuming m_blockOrder is ordered, we can use binary_search
@@ -674,7 +674,7 @@ namespace Eigen {
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void BandedBlockedSparseQR_Ext<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::updateMat(const Index &fromIdx, const Index &toIdx, MatrixType &mat, const Index &blockK) {
 		// Now update the unsolved rest of m_pmat
-		SparseBlockYTY::Element blockYTY = this->m_blocksYT[this->m_blocksYT.size() - 1];
+		typename SparseBlockYTY::Element blockYTY = this->m_blocksYT[this->m_blocksYT.size() - 1];
 		VectorXd resColJd;
 		VectorXd tmpResColJ;
 
@@ -683,7 +683,7 @@ namespace Eigen {
 				// Use temporary vector resColJ inside of the for loop - faster access
 				resColJd = mat.col(ci).toDense();
 				for (Index k = 0; k < this->m_blocksYT.size(); k++) {
-					MatrixType::StorageIndex subdiagElems = this->m_blocksYT[k].value.rows() - this->m_blocksYT[k].value.cols();
+					typename MatrixType::StorageIndex subdiagElems = this->m_blocksYT[k].value.rows() - this->m_blocksYT[k].value.cols();
 					FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, this->m_blocksYT[k].value.rows(), this->m_blocksYT[k].value.cols(), this->m_blocksYT[k].row, this->m_blocksYT[k].value.numZeros(), subdiagElems,
 						this->m_denseStartRow, this->m_denseNumRows)
 
@@ -702,7 +702,7 @@ namespace Eigen {
 				// Use temporary vector resColJ inside of the for loop - faster access
 				resColJd = mat.col(ci).toDense();
 				Index k = blockK;
-				MatrixType::StorageIndex subdiagElems = this->m_blocksYT[k].value.rows() - this->m_blocksYT[k].value.cols();
+				typename MatrixType::StorageIndex subdiagElems = this->m_blocksYT[k].value.rows() - this->m_blocksYT[k].value.cols();
 				FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, this->m_blocksYT[k].value.rows(), this->m_blocksYT[k].value.cols(), this->m_blocksYT[k].row, this->m_blocksYT[k].value.numZeros(), subdiagElems,
 					this->m_denseStartRow, this->m_denseNumRows)
 
@@ -721,7 +721,7 @@ namespace Eigen {
 		for (int ci = fromIdx; ci < toIdx; ci++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
 			resColJd = mat.col(ci).toDense();
-			MatrixType::StorageIndex subdiagElems = blockYTY.value.rows() - blockYTY.value.cols();
+			typename MatrixType::StorageIndex subdiagElems = blockYTY.value.rows() - blockYTY.value.cols();
 			FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, blockYTY.value.rows(), blockYTY.value.cols(), blockYTY.row, blockYTY.value.numZeros(), subdiagElems,
 				this->m_denseStartRow, this->m_denseNumRows)
 
@@ -793,7 +793,7 @@ namespace Eigen {
 			v.segment(1, houseqr.householderQ().essentialVector(0).rows()) = houseqr.householderQ().essentialVector(0);
 			Y.col(0) = v;
 			T(0, 0) = -houseqr.hCoeffs()(0);
-			for (MatrixType::StorageIndex bc = 1; bc < bi.numCols; bc++) {
+			for (typename MatrixType::StorageIndex bc = 1; bc < bi.numCols; bc++) {
 				v.setZero();
 				v(bc) = 1.0;
 				v.segment(bc + 1, houseqr.householderQ().essentialVector(bc).rows()) = houseqr.householderQ().essentialVector(bc);
@@ -812,8 +812,8 @@ namespace Eigen {
 	/*		MatrixXd V = houseqr.matrixQR().template triangularView<Upper>();
 			// Update sparse R with the rows solved in this step
 			int solvedRows = (i == numBlocks - 1) ? bi.numRows : this->m_blockMap.at(this->m_blockOrder.at(i + 1)).colIdx - bi.colIdx;
-			for (MatrixType::StorageIndex br = 0; br < solvedRows; br++) {
-				for (MatrixType::StorageIndex bc = 0; bc < bi.numCols; bc++) {
+			for (typename MatrixType::StorageIndex br = 0; br < solvedRows; br++) {
+				for (typename MatrixType::StorageIndex bc = 0; bc < bi.numCols; bc++) {
 					Rvals.add_if_nonzero(diagIdx + br, bi.colIdx + bc, V(br, bc));
 				}
 			}
@@ -839,7 +839,7 @@ namespace Eigen {
 				//numZeros = biNext.rowIdx - biNext.colIdx;
 				numZeros = (numZeros < 0) ? 0 : numZeros;
 
-				MatrixType::StorageIndex numCols = (biNext.numCols >= blockOverlap) ? biNext.numCols : blockOverlap;
+				typename MatrixType::StorageIndex numCols = (biNext.numCols >= blockOverlap) ? biNext.numCols : blockOverlap;
 				Ji = DenseMatrixType(activeRows + this->m_denseNumRows, numCols);
 				Ji.topRows(activeRows) = m_pmat.block(biNext.colIdx, biNext.colIdx, activeRows, numCols).toDense();
 				//Ji.topRows(activeRows) = m_pmat.block(bi.rowIdx + colIncrement, biNext.colIdx, activeRows, numCols).toDense();
@@ -924,7 +924,7 @@ namespace Eigen {
 										VectorXd resColJd;
 										resColJd = m_other.col(j).toDense();
 										for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-											MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+											typename MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 											FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems,
 												m_qr.m_denseStartRow, m_qr.m_denseNumRows)
 
@@ -940,7 +940,7 @@ namespace Eigen {
 										resColJ = resColJd.sparseView();
 										numNonZeros += resColJ.nonZeros();
 										resVals[j].reserve(resColJ.nonZeros());
-										for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+										for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 											resVals[j].push_back(std::make_pair(it.row(), it.value()));
 										}
 
@@ -972,7 +972,7 @@ namespace Eigen {
 										VectorXd resColJd;
 										resColJd = m_other.col(j).toDense();
 										for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-											MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+											typename MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 											FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems,
 												m_qr.m_denseStartRow, m_qr.m_denseNumRows)
 
@@ -988,7 +988,7 @@ namespace Eigen {
 										resColJ = resColJd.sparseView();
 										numNonZeros += resColJ.nonZeros();
 										resVals[j].reserve(resColJ.nonZeros());
-										for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+										for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 											resVals[j].push_back(std::make_pair(it.row(), it.value()));
 										}
 
@@ -1028,7 +1028,7 @@ namespace Eigen {
 						// Use temporary vector resColJ inside of the for loop - faster access
 						resColJd = m_other.col(j).toDense();
 						for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-							MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+							typename MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 							FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems,
 								m_qr.m_denseStartRow, m_qr.m_denseNumRows)
 
@@ -1041,7 +1041,7 @@ namespace Eigen {
 						// Write the result back to j-th column of res
 						resColJ = resColJd.sparseView();
 						res.startVec(j);
-						for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+						for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 							res.insertBack(it.row(), j) = it.value();
 						}
 					}
@@ -1055,7 +1055,7 @@ namespace Eigen {
 					for (Index j = 0; j < m_other.cols(); j++) {
 						resColJd = m_other.col(j).toDense();
 						for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-							MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+							typename MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 							FULL_TO_BLOCK_VEC_EXT(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems,
 								m_qr.m_denseStartRow, m_qr.m_denseNumRows)
 
@@ -1069,7 +1069,7 @@ namespace Eigen {
 						// Write the result back to j-th column of res
 						resColJ = resColJd.sparseView();
 						res.startVec(j);
-						for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+						for (typename SparseVector::InnerIterator it(resColJ); it; ++it) {
 							res.insertBack(it.row(), j) = it.value();
 						}
 					}
@@ -1116,7 +1116,7 @@ namespace Eigen {
 				//Compute res = Q' * other (other is vector - only one column => no iterations of j)
 				VectorX partialRes;
 				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					typename MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 					FULL_TO_BLOCK_VEC_EXT(res, partialRes, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems,
 						m_qr.m_denseStartRow, m_qr.m_denseNumRows)
 
@@ -1132,7 +1132,7 @@ namespace Eigen {
 				// Compute res = Q * other (other is vector - only one column => no iterations of j)
 				VectorX partialRes;
 				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					typename MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 					FULL_TO_BLOCK_VEC_EXT(res, partialRes, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems, 
 						m_qr.m_denseStartRow, m_qr.m_denseNumRows)
 

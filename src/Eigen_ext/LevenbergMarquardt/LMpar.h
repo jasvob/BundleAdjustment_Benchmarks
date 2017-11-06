@@ -33,7 +33,7 @@ namespace Eigen {
 			for (Index j = 0; j < nCols; ++j) {
 				wa1[j] /= sdiag[j];
 				temp = wa1[j];
-				for (SparseMatrix<Scalar, RowMajor, Index>::InnerIterator rowIt(s, j); rowIt; ++rowIt) {
+				for (typename SparseMatrix<Scalar, RowMajor, Index>::InnerIterator rowIt(s, j); rowIt; ++rowIt) {
 					if(rowIt.index() > j) {
 						wa1[rowIt.index()] -= rowIt.value() * temp;
 					}
@@ -48,7 +48,7 @@ namespace Eigen {
 			for (Index j = 0; j < nCols; ++j) {
 				wa1[j] /= sdiag[j];
 				temp = wa1[j];
-				for (SparseMatrix<Scalar, RowMajor, Index>::InnerIterator rowIt(srm, j); rowIt; ++rowIt) {
+				for (typename SparseMatrix<Scalar, RowMajor, Index>::InnerIterator rowIt(srm, j); rowIt; ++rowIt) {
 					if (rowIt.index() > j) {
 						wa1[rowIt.index()] -= rowIt.value() * temp;
 					}
@@ -159,7 +159,7 @@ namespace Eigen {
 				wa1 = sqrt(par)* diag;
 		
 				VectorType sdiag(n);
-				QRSolver::PermutationMatrixType pm = qr.colsPermutation();
+				typename QRSolver::PermutationMatrixType pm = qr.colsPermutation();
 				//PermutationMatrix<Dynamic, Dynamic, Index> pm = qr.colsPermutation(); // FixMe: Needed for SuiteSparseQR?
 				lmqrsolv2(qr, s, pm, wa1, qtb, x, sdiag);
 

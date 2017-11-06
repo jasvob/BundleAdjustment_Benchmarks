@@ -103,10 +103,10 @@ int main(int argc, char * argv[]) {
 	std::cout << "Done." << std::endl;
 
 	/***************** Show statistics before the optimization *****************/
-	//Utils::showErrorStatistics(avg_focal_length, INLIER_THRESHOLD, cams, distortions,
-	//	data, measurements, correspondingView, correspondingPoint);
-	//Utils::showObjective(avg_focal_length, INLIER_THRESHOLD, cams, distortions,
-	//	data, measurements, correspondingView, correspondingPoint);
+	Utils::showErrorStatistics(avg_focal_length, INLIER_THRESHOLD, cams, distortions,
+		data, measurements, correspondingView, correspondingPoint);
+	Utils::showObjective(avg_focal_length, INLIER_THRESHOLD, cams, distortions,
+		data, measurements, correspondingView, correspondingPoint);
 		
 	/***************** Setup and run the optimization *****************/
 	Eigen::VectorXd weights = Eigen::VectorXd::Ones(measurements.cols());
@@ -121,10 +121,52 @@ int main(int argc, char * argv[]) {
 	// Craete optimization functor
 	OptimizationFunctor functor(data.cols(), cams.size(), measurements, correspondingView, correspondingPoint, INLIER_THRESHOLD);
 	
+
+
+	/*
+	// Check Jacobian
+	std::cout << "Testing Jacobian ..." << std::endl;
+	for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
+		std::cout << "Eps = " << eps << std::endl;
+		NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
+		OptimizationFunctor::JacobianType J;
+		OptimizationFunctor::JacobianType J_fd;
+		std::cout << "Compute J ..." << std::endl;
+		functor.df(params, J);
+		std::cout << "Compute J_fd ..." << std::endl;
+		fd.df(params, J_fd);
+		std::cout << "Compute diff ..." << std::endl;
+		double diff = (J - J_fd).norm();
+
+		Logger::instance()->logMatrixCSV(J.block(0, 0, 1024, 1024).toDense(), "J_pts.csv");
+		Logger::instance()->logMatrixCSV(J.block(0, data.cols() * 3, 1024, cams.size() * 10).toDense(), "J_cams.csv");
+		Logger::instance()->logMatrixCSV(J_fd.block(0, 0, 1024, 1024).toDense(), "J_fd_pts.csv");
+		Logger::instance()->logMatrixCSV(J_fd.block(0, data.cols() * 3, 1024, cams.size() * 10).toDense(), "J_fd_cams.csv");
+
+		if (diff > 0) {
+			std::stringstream ss;
+			ss << "Jacobian diff(eps=" << eps << "), = " << diff;
+			std::cout << ss.str() << std::endl;
+		}
+
+		if (diff > 10.0) {
+			std::cout << "Test Jacobian - ERROR TOO BIG, exitting..." << std::endl;
+			return 0;
+		}
+	}
+	std::cout << "Test Jacobian - DONE, exitting..." << std::endl;
+	*/
+
+
+
+
+
 	// Craete the LM optimizer
 	Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor);
 	lm.setVerbose(true);
 	lm.setMaxfev(40);
+	//lm.setExternalScaling(1e-3);
+	//lm.setFactor(1e-3);
 	
 	// Run optimization
 	clock_t begin = clock();
@@ -132,6 +174,10 @@ int main(int argc, char * argv[]) {
 	std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 	
 	/***************** Show statistics after the optimization *****************/
+	Utils::showErrorStatistics(avg_focal_length, INLIER_THRESHOLD, params.cams, params.distortions,
+		params.data_points, measurements, correspondingView, correspondingPoint);
+	Utils::showObjective(avg_focal_length, INLIER_THRESHOLD, params.cams, params.distortions,
+		params.data_points, measurements, correspondingView, correspondingPoint);
 
 	Logger::instance()->log(Logger::Info, "Computation DONE!");
 

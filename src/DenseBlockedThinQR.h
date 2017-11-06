@@ -371,14 +371,10 @@ namespace Eigen {
 		std::string m_lastError;
 			
 		DenseMatrixType m_R;                // The triangular factor matrix
-		DenseMatrixType  m_pmatDense;	// Dense version of the input matrix - used for factorization (much faster than using sparse)
 		SparseBlockYTY m_blocksYT;		// Sparse block matrix storage holding the dense YTY blocks of the blocked representation of Householder reflectors.
 
 		PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
 		PermutationType m_rowPerm;
-		PermutationType m_houseColPerm;
-		std::vector<Index> m_nnzColPermIdxs;
-		std::vector<Index> m_zeroColPermIdxs;
 
 		RealScalar m_threshold;         // Threshold to determine null Householder reflections
 		bool m_useDefaultThreshold;     // Use default threshold

@@ -57,7 +57,7 @@ Scalar BAFunctor::estimateNorm(InputType const& x, StepType const& diag) {
 	Map<VectorXd> xtop{ (double*)x.data_points.data(), x.nDataPoints() * 3 };
 	total += xtop.cwiseProduct(diag.head(x.nDataPoints() * 3)).stableNorm();
 
-	return double(sqrt(total));
+	return Scalar(sqrt(total));
 
 	/*
 	Eigen::Vector3d pt;

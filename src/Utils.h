@@ -6,9 +6,13 @@
 #include "DistortionFunction.h"
 
 namespace Utils {
-	inline double psi(double const tau2, double const r2) { return (r2 < tau2) ? r2*(2.0 - r2 / tau2) / 4.0f : tau2 / 4; }
-	inline double psi_weight(double const tau2, double const r2) { return std::max(0.0, 1.0 - r2 / tau2); }
-	inline double psi_hat(double const tau2, double const r2, double const w2) { return w2*r2 + tau2 / 2.0*(w2 - 1)*(w2 - 1); }
+	//inline double psi(double const tau2, double const r2) { return (r2 < tau2) ? r2*(2.0 - r2 / tau2) / 4.0f : tau2 / 4; }
+	//inline double psi_weight(double const tau2, double const r2) { return std::max(0.0, 1.0 - r2 / tau2); }
+	//inline double psi_hat(double const tau2, double const r2, double const w2) { return w2*r2 + tau2 / 2.0*(w2 - 1)*(w2 - 1); }
+	inline double psi(double const tau2, double const r2) {
+		double const r4 = r2*r2, tau4 = tau2*tau2;
+		return (r2 < tau2) ? r2*(3.0 - 3 * r2 / tau2 + r4 / tau4) / 6.0f : tau2 / 6.0;
+	}
 
 	double showErrorStatistics(double const avg_focal_length, const double inlierThreshold, 
 		const CameraMatrix::Vector &cams, const DistortionFunction::Vector &distortions,
