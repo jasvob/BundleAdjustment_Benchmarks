@@ -57,9 +57,10 @@ namespace Eigen {
 			temp = wa1.blueNorm();
 		}
 
-		template <typename QRSolver, typename VectorType>
+		template <typename QRSolver, typename QRSolverInner, typename VectorType>
 		void lmpar2(
 			const QRSolver &qr,
+			QRSolverInner &qrInner,
 			const VectorType  &diag,
 			const VectorType  &qtb,
 			typename VectorType::Scalar m_delta,
@@ -161,7 +162,7 @@ namespace Eigen {
 				VectorType sdiag(n);
 				typename QRSolver::PermutationMatrixType pm = qr.colsPermutation();
 				//PermutationMatrix<Dynamic, Dynamic, Index> pm = qr.colsPermutation(); // FixMe: Needed for SuiteSparseQR?
-				lmqrsolv2(qr, s, pm, wa1, qtb, x, sdiag);
+				lmqrsolv2(qr, qrInner, s, pm, wa1, qtb, x, sdiag);
 
 				wa2 = diag.cwiseProduct(x);
 				dxnorm = wa2.blueNorm();

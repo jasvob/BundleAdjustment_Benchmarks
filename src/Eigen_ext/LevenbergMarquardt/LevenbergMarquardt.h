@@ -141,8 +141,8 @@ namespace Eigen {
 	// ----------------------------------------------------------------------------------------------
 
 	namespace internal {
-		template <typename QRSolver, typename VectorType>
-		void lmpar2(const QRSolver &qr, const VectorType  &diag, const VectorType  &qtb,
+		template <typename QRSolver, typename QRSolverInner, typename VectorType>
+		void lmpar2(const QRSolver &qr, QRSolverInner &qrInner, const VectorType  &diag, const VectorType  &qtb,
 			typename VectorType::Scalar m_delta, typename VectorType::Scalar &par,
 			VectorType  &x);
 	}
@@ -159,6 +159,7 @@ namespace Eigen {
 	{
 	public:
 		typedef _FunctorType FunctorType;
+		typedef typename FunctorType::QRSolverInner QRSolverInner;
 		typedef typename FunctorType::QRSolver QRSolver;
 		typedef typename FunctorType::JacobianType JacobianType;
 		typedef typename JacobianType::Scalar Scalar;
@@ -323,6 +324,8 @@ namespace Eigen {
 		bool m_isInitialized; // Check whether the minimization step has been called
 		ComputationInfo m_info;
 		bool m_verbose;
+
+		QRSolverInner m_qrfacInner;
 	};
 
 

@@ -44,18 +44,18 @@ Scalar BAFunctor::estimateNorm(InputType const& x, StepType const& diag) {
 		R = x.cams[i].getRotation();
 		Math::createRodriguesParamFromRotationMatrix(R, omega);
 		k12 = Eigen::Vector2d(x.distortions[i].getK1(), x.distortions[i].getK2());
-		focalLength = x.cams[i].getIntrinsic()(0, 0);
+		focalLength = x.cams[i].getFocalLength();
 
 		total += T.cwiseProduct(diag.segment<3>(cam_base + i * numCamParams)).stableNorm();
 		total += omega.cwiseProduct(diag.segment<3>(cam_base + i * numCamParams + rotationOffset)).stableNorm();
 		total += k12.cwiseProduct(diag.segment<2>(cam_base + i * numCamParams + radialParamsOffset)).stableNorm();
-		total += (focalLength * diag[cam_base + i * numCamParams + focalLengthOffset]);
+		total += sqrt((focalLength * diag[cam_base + i * numCamParams + focalLengthOffset]) * (focalLength * diag[cam_base + i * numCamParams + focalLengthOffset]));
 	}
 	total = total * total;
 
 
 	Map<VectorXd> xtop{ (double*)x.data_points.data(), x.nDataPoints() * 3 };
-	total += xtop.cwiseProduct(diag.head(x.nDataPoints() * 3)).stableNorm();
+	total += xtop.cwiseProduct(diag.head(x.nDataPoints() * 3)).squaredNorm();
 
 	return Scalar(sqrt(total));
 

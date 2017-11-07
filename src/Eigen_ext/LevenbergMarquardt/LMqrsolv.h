@@ -228,9 +228,10 @@ namespace Eigen {
 			res.finalize();
 		}
 
-		template <typename QRSolver, typename Scalar, int _Options, typename _Index, typename PermIndex>
+		template <typename QRSolver, typename QRSolverInner, typename Scalar, int _Options, typename _Index, typename PermIndex>
 		void lmqrsolv2(
 			const QRSolver &qr,
+			QRSolverInner &slvr,
 			SparseMatrix<Scalar, _Options, _Index> &s,
 			const PermutationMatrix<Dynamic, Dynamic, PermIndex> &iPerm,
 			const Matrix<Scalar, Dynamic, 1> &diag,
@@ -241,12 +242,12 @@ namespace Eigen {
 			typedef typename SparseMatrix<Scalar, _Options, _Index>::Index Index;
 			typedef SparseMatrix<Scalar, RowMajor, Index> FactorType;
 			typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
-
+			/*
 			typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > DenseBlockSolver;
 			typedef BlockDiagonalSparseQR_Ext<FactorType, DenseBlockSolver> LeftBlkSolver;
 			typedef DenseBlockedThinQR<DenseMatrix, NaturalOrdering<Index>, 10, true> RightBlkSolver;
 			typedef BlockAngularSparseQR_Ext<FactorType, LeftBlkSolver, RightBlkSolver> SchurlikeQRSolver;
-			
+			*/
 			/* Local variables */
 			Index i, j, k, l;
 			Scalar temp;
@@ -261,15 +262,19 @@ namespace Eigen {
 			interleaveSparse<FactorType, PermIndex>(s, diag, iPerm, RD);
 		
 			//// Factorize the interleaved matrix to get "something" upper triangular again
-			static SchurlikeQRSolver slvr;
+			//static SchurlikeQRSolver slvr;
 			Index leftBlockCols = qr.leftBlockCols();
 			Index rightBlockCols = RD.cols() - leftBlockCols;
 			slvr.setSparseBlockParams(RD.rows() - 2 * rightBlockCols, leftBlockCols);
 			slvr.getLeftSolver().setPattern(RD.rows() - 2 * rightBlockCols, leftBlockCols, 6, 3);
 			slvr.compute(RD);
+
+			//SparseMatrix<Scalar, RowMajor, Index> factType = RD;
+			//std::cout << "Q * R - RD = " << (slvr.matrixQ() * slvr.matrixR() - factType).norm() << std::endl;
+			//std::cout << "Q.T * RD - R = " << (slvr.matrixQ().transpose() * factType - slvr.matrixR()).norm() << std::endl;
 			
 			// awf moved here from 2nd last line below -- sdiag was not signalling rank deficiency in R (last 3 rows all zero)
-			sdiag = slvr.matrixR().diagonal().eval();
+			sdiag = slvr.colsPermutation() * slvr.matrixR().diagonal();
 			
 			// Solve the triangular system for z. If the system is 
 			// singular, then obtain a least squares solution
@@ -277,16 +282,17 @@ namespace Eigen {
 			for (nsing = 0; nsing < n && sdiag(nsing) != 0; nsing++) {}
 			
 			// Update qtb as well
-			wa.head(n) = slvr.colsPermutation() * wa.head(n);
 			wa = slvr.matrixQ().transpose() * wa;
+			wa.head(n) = wa.head(n) * slvr.colsPermutation();
 			wa.tail(2 * n - nsing).setZero();
 			wa.head(nsing) = slvr.matrixR().topLeftCorner(nsing, nsing).template triangularView<Upper>().solve/*InPlace*/(wa.head(nsing));
 			
 			//// Permute the components of z back to components of x
-			wa.head(n) = slvr.colsPermutation().inverse() * wa.head(n);
+			wa.head(n) = slvr.colsPermutation() * wa.head(n);
 			//wa.head(n) = ;
-			Matrix<Scalar, Dynamic, 1> wa2 = Map<Matrix<Scalar, Dynamic, 1>, 0, InnerStride<2>>(wa.data(), n);
-			x = iPerm * wa2; //wa.head(n)
+			//Matrix<Scalar, Dynamic, 1> wa2 = Map<Matrix<Scalar, Dynamic, 1>, 0, InnerStride<2>>(wa.data(), n);
+			//x = iPerm * wa2; //wa.head(n)
+			x = iPerm * wa.head(n);
 		}
 	} // end namespace internal
 

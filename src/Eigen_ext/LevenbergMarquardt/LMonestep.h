@@ -122,7 +122,7 @@ namespace Eigen {
 		do {
 			/* determine the levenberg-marquardt parameter. */
 			StepType step(n);
-			internal::lmpar2<QRSolver, StepType>(m_qrfac, m_diag, m_qtf, m_delta, m_par, step);
+			internal::lmpar2<QRSolver, QRSolverInner, StepType>(m_qrfac, m_qrfacInner, m_diag, m_qtf, m_delta, m_par, step);
 
 			/* store the direction p and x + p. calculate the norm of p. */
 			step = -step;

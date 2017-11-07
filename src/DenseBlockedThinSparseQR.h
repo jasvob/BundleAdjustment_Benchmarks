@@ -14,8 +14,8 @@
 #include <ctime>
 #include <typeinfo>
 #include <shared_mutex>
-#include "SparseBlockCOO_Ext2.h"
-//#include "unsupported/Eigen/src/SparseQRExtra/SparseBlockCOO.h"
+//#include "SparseBlockCOO_Ext2.h"
+#include "unsupported/Eigen/src/SparseQRExtra/SparseBlockCOO.h"
 #include "unsupported/Eigen/src/SparseQRExtra/eigen_extras.h"
 
 namespace Eigen {
@@ -159,6 +159,8 @@ namespace Eigen {
 			m_isInitialized = false;
 			m_factorizationIsok = false;
 			m_blocksYT.clear();
+			this->m_nnzColPermIdxs.clear();
+			this->m_zeroColPermIdxs.clear();
 
 			clock_t beginFull = clock();
 
@@ -444,10 +446,27 @@ namespace Eigen {
 	*
 	* \note In this step it is assumed that there is no empty row in the matrix \a mat.
 	*/
+	template <typename IndexType>
+	struct ColCount {
+		IndexType origIdx;
+		IndexType nnzs;
+
+		ColCount() : origIdx(0), nnzs(0) {
+		}
+
+		ColCount(const IndexType &origIdx, const IndexType &nnzs)
+			: origIdx(origIdx), nnzs(nnzs){
+		}
+
+		bool operator<(const ColCount& rhs) const { 
+			return this->nnzs < rhs.nnzs;
+		}
+	};
+
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void DenseBlockedThinSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::analyzePattern(const MatrixType& mat, bool rowPerm, bool colPerm)
 	{
-		typedef ColumnCount<typename MatrixType::StorageIndex> MatrixColCount;
+		typedef ColCount<typename MatrixType::StorageIndex> MatrixColCount;
 		typedef RowRange<typename MatrixType::StorageIndex> MatrixRowRange;
 		typedef std::map<typename MatrixType::StorageIndex, typename MatrixType::StorageIndex> BlockBandSize;
 

@@ -443,7 +443,7 @@ namespace Eigen {
 		rmJ2.topRows(n1) = leftSolver.matrixQ().transpose() * rmJ2.topRows(n1);
 		J2 = SparseMatrix<Scalar, ColMajor, StorageIndex>(rmJ2);
 		
-		SparseMatrix<Scalar> J2bot = J2.bottomRows(n1 - m1);
+		SparseMatrix<Scalar> J2bot = J2.bottomRows(n1 + n2 - m1);
 		rightSolver.compute(J2bot);
 
 		// Verify correctness of the qr decomposition
@@ -474,6 +474,11 @@ namespace Eigen {
 		Index m2 = mat.cols() - m_blockCols;
 		Index n1 = m_blockRows;
 		Index n2 = mat.rows() - m_blockRows;
+
+		std::cout << "m1: " << m1 << std::endl;
+		std::cout << "m2: " << m2 << std::endl;
+		std::cout << "n1: " << n1 << std::endl;
+		std::cout << "n2: " << n2 << std::endl;
 
 		/// mat = | J1 J2 |
 		/// J1 has m1 cols 

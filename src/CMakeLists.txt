@@ -122,3 +122,24 @@ ADD_EXECUTABLE(LevMar_Solver_Test
 	)
 	
 TARGET_LINK_LIBRARIES(LevMar_Solver_Test ${SSP_LIB})
+
+ADD_EXECUTABLE(SimpleLM_Test
+	simplelm_test.cpp
+	Logger.cpp
+	CameraMatrix.cpp
+	DistortionFunction.cpp
+	Logger.h
+	Optimization/SimpleLM.h
+	CameraMatrix.h
+	DistortionFunction.h
+	Utils.h
+	MathUtils.h
+	BlockAngularSparseQR_Ext.h
+	BlockDiagonalSparseQR_Ext.h
+	BandedBlockedSparseQR_Ext.h
+	SparseBlockCOO_Ext.h
+	SparseQR_Ext.h
+	)
+	
+TARGET_LINK_LIBRARIES(SimpleLM_Test ${SSP_LIB})
+

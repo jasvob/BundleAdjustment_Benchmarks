@@ -126,6 +126,16 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	//typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	typedef SchurlikeQRSolver QRSolver;
 
+
+	typedef SparseMatrix<Scalar, RowMajor, Index> FactorType;
+	typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
+	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > LMDenseBlockSolver;
+	typedef BlockDiagonalSparseQR_Ext<FactorType, LMDenseBlockSolver> LMLeftBlkSolver;
+	typedef DenseBlockedThinQR<DenseMatrix, NaturalOrdering<Index>, 10, true> LMRightBlkSolver;
+	typedef BlockAngularSparseQR_Ext<FactorType, LMLeftBlkSolver, LMRightBlkSolver> LMSchurlikeQRSolver;
+	typedef LMSchurlikeQRSolver QRSolverInner;
+
+
 	// And tell the algorithm how to set the QR parameters.
 	virtual void initQRSolver(SchurlikeQRSolver &qr);
 
