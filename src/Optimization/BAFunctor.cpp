@@ -5,15 +5,15 @@
 BAFunctor::BAFunctor(const Eigen::Index numPoints, const Eigen::Index numCameras, const Eigen::Matrix2Xd &measurements,
 	const std::vector<int> &correspondingView, const std::vector<int> &correspondingPoint,
 	double inlierThreshold) 
-	: Base(numPoints * 3 + numCameras * 10, measurements.cols() * 2),
+	: Base(numPoints * 3 + numCameras * 9, measurements.cols() * 2),
 	measurements(measurements),
 	correspondingView(correspondingView),
 	correspondingPoint(correspondingPoint),
 	inlierThreshold(inlierThreshold),
-	numParameters(numPoints * 3 + numCameras * 10),
+	numParameters(numPoints * 3 + numCameras * 9),
 	numPointParams(numPoints * 3),
 	numResiduals(measurements.cols() * 2),
-	numJacobianNonzeros(measurements.cols() * 2 * 3 + 10 * numCameras) {
+	numJacobianNonzeros(measurements.cols() * 2 * 3 + 9 * numCameras) {
 
 	initWorkspace();
 }
@@ -28,7 +28,7 @@ Scalar BAFunctor::estimateNorm(InputType const& x, StepType const& diag) {
 
 	// Camera parameters ordering
 	Index numPointCoords = 3;	// xyz
-	Index numCamParams = 10;
+	Index numCamParams = 9;
 	Index translationOffset = 0;
 	Index rotationOffset = 3;
 	Index focalLengthOffset = 6;

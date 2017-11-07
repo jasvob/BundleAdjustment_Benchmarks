@@ -151,19 +151,9 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	/************ ENERGIES, GRADIENTS and UPDATES ************/
 	/************ ENERGIES ************/
 	// Residual wrt to 3d points
-	inline double psi(const double tau2, const double r2) {
-		double const r4 = r2*r2, tau4 = tau2*tau2;
-		return (r2 < tau2) ? r2*(3.0 - 3 * r2 / tau2 + r4 / tau4) / 6.0f : tau2 / 6.0;
-	}
-
-	inline double psi_weight(double const tau2, double const r2) {
-		return sqr(std::max(0.0, 1.0 - r2 / tau2));
-	}
-
-	inline double psi_hat(double const tau2, double const r2, double const w2) {
-		double const w = sqrt(w2);
-		return w2*r2 + tau2 / 3.0*sqr(w - 1)*(2 * w + 1);
-	}
+	inline double psi(double const tau2, double const r2) { return (r2 < tau2) ? r2*(2.0 - r2 / tau2) / 4.0f : tau2 / 4; }
+	inline double psi_weight(double const tau2, double const r2) { return std::max(0.0, 1.0 - r2 / tau2); }
+	inline double psi_hat(double const tau2, double const r2, double const w2) { return w2*r2 + tau2 / 2.0*(w2 - 1)*(w2 - 1); }
 
 	Vector2d projectPoint(const CameraMatrix &cam, const DistortionFunction &distortion, const Vector3d &X) {
 		Vector3d XX = cam.transformDirectionIntoCameraSpace(X);
@@ -181,16 +171,23 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			int point = correspondingPoint[i];
 
 			// Project 3D point into corresponding camera view
-			//Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
-			Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			//Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
 			Eigen::Vector2d r = (q - measurements.col(i));
 
 			double sqrt_psi = sqrt(psi(sqrInlierThreshold, r.squaredNorm()));
 			double rnorm_r = 1.0 / std::max(eps_psi_residual, r.norm());
 
 			// Compute residual for the point
-			fvec.segment<2>(i * 2) = Eigen::Vector2d(sqrt_psi * rnorm_r, sqrt_psi * rnorm_r);
+			fvec.segment<2>(i * 2) = r.cwiseProduct(Eigen::Vector2d(sqrt_psi * rnorm_r, sqrt_psi * rnorm_r));
 			//fvec.segment<2>(point * x.nCameras() + view) = q - measurements.col(i);
+
+			/*if (i == 0) {
+				std::cout << "q: \n" << q << std::endl;
+				std::cout << "r: \n" << r << std::endl;
+				std::cout << "sqrt_psi, rnorm_r: " << sqrt_psi << ", " << rnorm_r << std::endl;
+				std::cout << "fvec: " << fvec.segment<2>(i * 2) << std::endl;
+			}*/
 		}
 	}
 	
@@ -202,7 +199,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 
 		// Camera parameters ordering
 		Index numPointCoords = 3;	// xyz
-		Index numCamParams = 10;
+		Index numCamParams = 9;
 		Index transfParamsOffset = 0;
 		Index focalLengthOffset = 6;
 		Index radialParamsOffset = 7;
@@ -218,33 +215,60 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 
 			view = correspondingView[i];
 			point = correspondingPoint[i];
+
+			/*if (i == 0) {
+				std::cout << "Point/View: " << point << "/" << view << std::endl;
+			}*/
 		
 			this->poseDerivatives(x.cams[view], x.data_points.col(point), XX, dXX_dRT, dXX_dX);
+			/*if (i == 0) {
+				std::cout << "Pose deriv: \n";
+				std::cout << "dXX_dRT: \n" << dXX_dRT << std::endl;
+				std::cout << "dXX_dX: \n" << dXX_dX << std::endl;
+				std::cout << "XX: \n" << XX << std::endl;
+			}*/
 		
 			Eigen::Vector2d xu;	// Undistorted image point
 			xu(0) = XX(0) / XX(2);
 			xu(1) = XX(1) / XX(2);
+			/*if (i == 0) {
+				std::cout << "xu: \n" << xu << std::endl;
+			}*/
 
 			Eigen::Vector2d xd = x.distortions[view](xu);	// Distorted image point
+			/*if (i == 0) {
+				std::cout << "xd: \n" << xd << std::endl;
+			}*/
 
 			double focalLength = x.cams[view].getFocalLength();
 
 			Eigen::Matrix2d dp_dxd = Eigen::Matrix2d::Zero();
 			dp_dxd(0, 0) = focalLength;
 			dp_dxd(1, 1) = focalLength;
+			/*if (i == 0) {
+				std::cout << "dp_dxd: \n" << dp_dxd << std::endl;
+			}*/
 
 			Matrix2x3d dxu_dXX = Matrix2x3d::Zero();
 			dxu_dXX(0, 0) = 1.0 / XX(2);							  dxu_dXX(0, 2) = -XX(0) / (XX(2) * XX(2));
 										 dxu_dXX(1, 1) = 1.0 / XX(2); dxu_dXX(1, 2) = -XX(1) / (XX(2) * XX(2));
+			/*if (i == 0) {
+				std::cout << "dxu_dXX: \n" << dxu_dXX << std::endl;
+			}*/
 
 			Eigen::Matrix2d dxd_dxu = x.distortions[view].derivativeWrtUndistortedPoint(xu);
 			Eigen::Matrix2d dp_dxu = dp_dxd * dxd_dxu;
 			Matrix2x3d dp_dXX = dp_dxu * dxu_dXX;
+			/*if (i == 0) {
+				std::cout << "dxd_dxu: \n" << dxd_dxu << std::endl;
+				std::cout << "dp_dxu: \n" << dp_dxu << std::endl;
+				std::cout << "dp_dXX: \n" << dp_dXX << std::endl;
+			}*/
 
 			// Compute outer derivative from psi residual
 			double sqrInlierThreshold = this->inlierThreshold * this->inlierThreshold;
-			//const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
-			const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			//const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
 			const Vector2d r = q - measurements.col(i);
 			const double r2 = r.squaredNorm();
 			const double W = psi_weight(sqrInlierThreshold, r2);
@@ -259,12 +283,16 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			outer_deriv = W / 2.0 * rsqrt_psi * r_rt + sqrt_psi * rcp_r2 * (rI - r_rt);
 
 			// Prepare Jacobian block
-			Eigen::MatrixXd Jblock = Eigen::MatrixXd::Zero(2, 10 + 3);	// 10 camera params + xyz 3d point coords
+			Eigen::MatrixXd Jblock = Eigen::MatrixXd::Zero(2, 9 + 3);	// 9 camera params + xyz 3d point coords
 
 			// Set deriv wrt camera parameters
 			Eigen::Matrix2d dxd_dk1k2 = x.distortions[view].derivativeWrtRadialParameters(xu);
 			Eigen::Matrix2d d_dk1k2 = dp_dxd * dxd_dk1k2;
-			Jblock.block<2, 2>(0, 7) = d_dk1k2;
+			Jblock.block<2, 2>(0, 7) = d_dk1k2; 
+			/*if (i == 0) {
+				std::cout << "dxd_dk1k2: \n" << dxd_dk1k2 << std::endl;
+				std::cout << "d_dk1k2: \n" << d_dk1k2 << std::endl;
+			}*/
 			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(0, 0));
 			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 1, d_dk1k2(0, 1));
 			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + radialParamsOffset + 0, d_dk1k2(1, 0));
@@ -276,6 +304,9 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 
 			Matrix2x6d dp_dRT = dp_dXX * dXX_dRT;
 			Jblock.block<2, 6>(0, 0) = dp_dRT;
+			/*if (i == 0) {
+				std::cout << "dp_dRT: \n" << dp_dRT << std::endl;
+			}*/
 			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 0, dp_dRT(0, 0));
 			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 1, dp_dRT(0, 1));
 			//jvals.add(i * 2 + 0, cam_base + view * numCamParams + transfParamsOffset + 2, dp_dRT(0, 2));
@@ -290,7 +321,10 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			//jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 5, dp_dRT(1, 5));
 
 			// Set deriv wrt 3d points
-			Jblock.block<2, 3>(0, 10) = dp_dXX * dXX_dX;
+			Jblock.block<2, 3>(0, 9) = dp_dXX * dXX_dX;
+			/*if (i == 0) {
+				std::cout << "dp_dX: \n" << Jblock.block<2, 3>(0, 9) << std::endl;
+			}*/
 			//Matrix2x3d dp_dX = dp_dXX * dXX_dX;
 			//jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 0, dp_dX(0, 0));
 			//jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 1, dp_dX(0, 1));
@@ -303,6 +337,16 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	
 			// Multiply block with outer deriv
 			Jblock = outer_deriv * Jblock;
+
+			/*if (i == 0)
+			{
+				std::cout << "r2 = " << r2 << " W = " << W << " sqrt_psi = " << sqrt_psi << std::endl;
+				std::cout << "outer_deriv = " << outer_deriv << std::endl;
+			}*/
+
+			/*if (i == 0) {
+				std::cout << Jblock << std::endl;
+			}*/
 
 			// Fill into the Jacobian
 			// Set deriv wrt camera parameters
@@ -328,12 +372,12 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			jvals.add(i * 2 + 1, cam_base + view * numCamParams + transfParamsOffset + 5, Jblock(1, 5));
 
 			// Set deriv wrt 3d points
-			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 0, Jblock(0, 10));
-			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 1, Jblock(0, 11));
-			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 2, Jblock(0, 12));
-			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 0, Jblock(1, 10));
-			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 1, Jblock(1, 11));
-			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 2, Jblock(1, 12));
+			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 0, Jblock(0, 9));
+			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 1, Jblock(0, 10));
+			jvals.add(i * 2 + 0, pt_base + point * numPointCoords + 2, Jblock(0, 11));
+			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 0, Jblock(1, 9));
+			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 1, Jblock(1, 10));
+			jvals.add(i * 2 + 1, pt_base + point * numPointCoords + 2, Jblock(1, 11));
 
 
 			/*
@@ -383,7 +427,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 
 		// Camera parameters ordering
 		Index numPointCoords = 3;	// xyz
-		Index numCamParams = 10;
+		Index numCamParams = 9;
 		Index translationOffset = 0;
 		Index rotationOffset = 3;
 		Index focalLengthOffset = 6;

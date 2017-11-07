@@ -123,8 +123,9 @@ int main(int argc, char * argv[]) {
 	
 
 
-	/*
+
 	// Check Jacobian
+	/*
 	std::cout << "Testing Jacobian ..." << std::endl;
 	for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
 		std::cout << "Eps = " << eps << std::endl;
@@ -139,9 +140,9 @@ int main(int argc, char * argv[]) {
 		double diff = (J - J_fd).norm();
 
 		Logger::instance()->logMatrixCSV(J.block(0, 0, 1024, 1024).toDense(), "J_pts.csv");
-		Logger::instance()->logMatrixCSV(J.block(0, data.cols() * 3, 1024, cams.size() * 10).toDense(), "J_cams.csv");
+		Logger::instance()->logMatrixCSV(J.block(0, data.cols() * 3, 1024, cams.size() * 9).toDense(), "J_cams.csv");
 		Logger::instance()->logMatrixCSV(J_fd.block(0, 0, 1024, 1024).toDense(), "J_fd_pts.csv");
-		Logger::instance()->logMatrixCSV(J_fd.block(0, data.cols() * 3, 1024, cams.size() * 10).toDense(), "J_fd_cams.csv");
+		Logger::instance()->logMatrixCSV(J_fd.block(0, data.cols() * 3, 1024, cams.size() * 9).toDense(), "J_fd_cams.csv");
 
 		if (diff > 0) {
 			std::stringstream ss;
@@ -155,8 +156,7 @@ int main(int argc, char * argv[]) {
 		}
 	}
 	std::cout << "Test Jacobian - DONE, exitting..." << std::endl;
-	*/
-
+	//*/
 
 
 
