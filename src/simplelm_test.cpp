@@ -255,7 +255,7 @@ int main() {
 
 		std::cout << "LM finished with status: " << SimpleLMInfo::statusToString(info) << std::endl;
 
-		break;
+	//	break;
 
 		/*
 		// check parameters ambiguity before test result

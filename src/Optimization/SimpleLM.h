@@ -237,7 +237,7 @@ namespace Eigen {
 		typedef typename FunctorType::StepType StepType;
 
 		// How many values to keep in energy history
-		const Index EnergyHistorySize = 10;
+		const Index EnergyHistorySize = 2;
 
 		SimpleLM(FunctorType &functor)
 			: m_functor(functor),
@@ -268,7 +268,7 @@ namespace Eigen {
 			m_jacLambda.setZero();
 
 			// Allocate vector of history fvals
-			m_energyHistory = std::vector<Scalar>(10, Scalar(0));
+			m_energyHistory = std::vector<Scalar>(EnergyHistorySize, Scalar(0));
 
 			SparseMatrix<Scalar, RowMajor, StorageIndex> I(m_jacobian.cols(), m_jacobian.cols());
 			I.setIdentity();
@@ -312,6 +312,7 @@ namespace Eigen {
 				// Compute Jacobian
 				m_functor.df(x, m_jacobian);
 
+				// Compute this for later (see computation of "rho" in case of successful iteration)
 				JtRes = m_jacobian.transpose() * m_residuals;
 
 				// Compute gradient norm estimate 
@@ -345,7 +346,7 @@ namespace Eigen {
 						rowPerm.indices()(m_jacobian.rows() + c) = currRow;
 						currRow++;
 					}
-					// Conservative resize jacobian so that it can be concatenated with the new rows
+					// Create concatenation of the Jacobian with the diagonal matrix of lambdas
 					SparseMatrix<Scalar, RowMajor, StorageIndex> jacRm(m_jacLambda);
 					jacRm.topRows(m_jacobian.rows()) = m_jacobian;
 					jacRm.bottomRows(m_jacobian.cols()) = I * m_optParams.lambda;
@@ -363,15 +364,12 @@ namespace Eigen {
 					}
 
 					// Compute Q.T * b
-					//resTmp.head(nc) = m_solver.colsPermutation() * resTmp.head(nc);
 					ValueType qtb = m_solver.matrixQ().transpose() * resTmp;
-					//qtb.head(nc) = m_solver.colsPermutation() * qtb.head(nc);
+
 					// And compute the step
 					m_dx = m_solver.matrixR().topLeftCorner(m_jacobian.cols(), m_jacobian.cols()).template triangularView<Upper>().solve(qtb.head(m_jacobian.cols()));
-					// Inverse colpermute the step update - so that it corresponds to the original x values ??? FixMe: jasvob - is this needed?
-
-					std::cout << m_solver.colsPermutation().indices() << std::endl;
-
+				
+					// Permute the updates so that the vector ordering corresponds to the ordering of x
 					m_dx = m_solver.colsPermutation() * m_dx;
 										
 					// Compute new step test values
@@ -387,8 +385,6 @@ namespace Eigen {
 
 					// Decide what to do next
 					if (energyTest < m_energy) {
-						//JtRes = m_jacLambda.transpose() * resTmp;
-
 						Scalar rhoScale = m_dx.transpose() * (m_optParams.lambda * m_dx + JtRes);
 						Scalar rho = (m_energy - energyTest) / rhoScale;
 						Scalar lambdaMul = 1.0 - std::pow(2.0 * rho - 1.0, 3);

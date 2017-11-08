@@ -422,7 +422,6 @@ namespace Eigen {
 	/*********************************************************************************************************/
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex, typename MatType>
 	void solveRightBlock(const int m1, const int m2, const int n1, const int n2, MatType &J2, const SparseMatrix<Scalar, RowMajor, StorageIndex> &mat, RightBlockSolver &rightSolver, LeftBlockSolver &leftSolver) {
-		std::cout << "DenseV" << std::endl;
 		MatType J2toprows = mat.block(0, m1, n1, m2).toDense();
 		J2.topRows(n1).noalias() = leftSolver.matrixQ().transpose() * J2toprows;
 		J2.bottomRows(n2) = mat.block(n1, m1, n2, m2);
@@ -439,7 +438,6 @@ namespace Eigen {
 
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex>
 	void solveRightBlock(const int m1, const int m2, const int n1, const int n2, SparseMatrix<Scalar, ColMajor, StorageIndex> &J2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &mat, RightBlockSolver &rightSolver, LeftBlockSolver &leftSolver) {
-		std::cout << "SparseV" << std::endl; 
 		J2 = mat.rightCols(m2);
 		SparseMatrix<Scalar, RowMajor, StorageIndex> rmJ2(J2);
 		rmJ2.topRows(n1) = leftSolver.matrixQ().transpose() * rmJ2.topRows(n1);
@@ -464,7 +462,7 @@ namespace Eigen {
 	* \param mat The sparse column-major matrix
 	*/
 
-#define OUTPUT_MAT 1
+//#define OUTPUT_MAT 1
 //#define OUTPUT_TIMING 1
 	template <typename MatrixType, typename BlockQRSolverLeft, typename BlockQRSolverRight>
 	void BlockAngularSparseQR_Ext<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::factorize(const MatrixType& mat)
