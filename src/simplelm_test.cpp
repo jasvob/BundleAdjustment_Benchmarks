@@ -105,7 +105,9 @@ struct SparseBlockDiagonalQR_EllipseFitting : public EllipseFitting<_Scalar> {
 	// QR for J1 subblocks is 2x1
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > DenseBlockSolver;
 	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseBlockSolver> LeftSuperBlockSolver;
-	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<IndexType>, 1, true> RightSuperBlockSolver;
+	//typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<IndexType>, 5, true> RightSuperBlockSolver;
+	//typedef HouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
+	typedef DenseBlockSolver RightSuperBlockSolver;
 	// QR for J is concatenation of the above.
 	typedef BlockAngularSparseQR_Ext<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 
@@ -180,7 +182,7 @@ void initializeParams(int nDataPoints, const Matrix2Xd &ellipsePoints, double in
 #define LM_VERBOSE 0
 
 const int NumTests = 9;
-int NumSamplePoints[NumTests] = { 20, 500, 1000, 2000, 5000, 10000, 50000, 100000, 500000 };
+int NumSamplePoints[NumTests] = { 10, 500, 1000, 2000, 5000, 10000, 50000, 100000, 500000 };
 
 int main() {
 	//eigen_assert(false);
@@ -239,9 +241,9 @@ int main() {
 		double duration;
 		initializeParams(nDataPoints, ellipsePoints, incr, params);
 		typedef SparseBlockDiagonalQR_EllipseFitting<Scalar>  SparseBlockDiagonalQRFunctor;
-		Eigen::SimpleLM<SparseBlockDiagonalQRFunctor>::Status info;
+		Eigen::SimpleLMInfo::Status info;
 		SparseBlockDiagonalQRFunctor functor(ellipsePoints);
-		Eigen::SimpleLM< SparseBlockDiagonalQRFunctor > lm(functor);
+		Eigen::SimpleLM< SparseBlockDiagonalQRFunctor, true > lm(functor);
 		//lm3.setVerbose(LM_VERBOSE);
 		begin = clock();
 		info = lm.minimize(params);
@@ -250,6 +252,10 @@ int main() {
 		printParams(params, nDataPoints, duration);
 
 		std::cout << "#####################################################################" << std::endl;
+
+		std::cout << "LM finished with status: " << SimpleLMInfo::statusToString(info) << std::endl;
+
+		break;
 
 		/*
 		// check parameters ambiguity before test result

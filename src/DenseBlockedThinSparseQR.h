@@ -233,7 +233,7 @@ namespace Eigen {
 			this->m_R = MatrixType(rmR).template triangularView<Upper>();
 			*/
 			//this->m_nonzeropivots = this->m_R.cols();
-            std::cout << "NNZ pivots: " << this->m_nonzeroPivots << std::endl;
+            //std::cout << "NNZ pivots: " << this->m_nonzeroPivots << std::endl;
             
 			m_isInitialized = true;
 		}

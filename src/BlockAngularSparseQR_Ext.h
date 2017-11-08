@@ -381,7 +381,7 @@ namespace Eigen {
 				for (int r = 0; r < m1; r++) {
 					Rout.insertBack(r, m1 + c) = J2(r, rightSolver.colsPermutation().indices()(c));
 				}
-				for (int r = m1 + c; r < m1 + m2; r++) {
+				for (int r = m1; r <= m1 + c; r++) {
 					Rout.insertBack(r, m1 + c) = R2(r - m1, c);
 				}
 			}
@@ -422,6 +422,7 @@ namespace Eigen {
 	/*********************************************************************************************************/
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex, typename MatType>
 	void solveRightBlock(const int m1, const int m2, const int n1, const int n2, MatType &J2, const SparseMatrix<Scalar, RowMajor, StorageIndex> &mat, RightBlockSolver &rightSolver, LeftBlockSolver &leftSolver) {
+		std::cout << "DenseV" << std::endl;
 		MatType J2toprows = mat.block(0, m1, n1, m2).toDense();
 		J2.topRows(n1).noalias() = leftSolver.matrixQ().transpose() * J2toprows;
 		J2.bottomRows(n2) = mat.block(n1, m1, n2, m2);
@@ -438,6 +439,7 @@ namespace Eigen {
 
 	template <typename RightBlockSolver, typename LeftBlockSolver, typename StorageIndex>
 	void solveRightBlock(const int m1, const int m2, const int n1, const int n2, SparseMatrix<Scalar, ColMajor, StorageIndex> &J2, const SparseMatrix<Scalar, ColMajor, StorageIndex> &mat, RightBlockSolver &rightSolver, LeftBlockSolver &leftSolver) {
+		std::cout << "SparseV" << std::endl; 
 		J2 = mat.rightCols(m2);
 		SparseMatrix<Scalar, RowMajor, StorageIndex> rmJ2(J2);
 		rmJ2.topRows(n1) = leftSolver.matrixQ().transpose() * rmJ2.topRows(n1);
@@ -462,7 +464,8 @@ namespace Eigen {
 	* \param mat The sparse column-major matrix
 	*/
 
-//#define OUTPUT_MAT 1
+#define OUTPUT_MAT 1
+//#define OUTPUT_TIMING 1
 	template <typename MatrixType, typename BlockQRSolverLeft, typename BlockQRSolverRight>
 	void BlockAngularSparseQR_Ext<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::factorize(const MatrixType& mat)
 	{
@@ -475,11 +478,6 @@ namespace Eigen {
 		Index n1 = m_blockRows;
 		Index n2 = mat.rows() - m_blockRows;
 
-		std::cout << "m1: " << m1 << std::endl;
-		std::cout << "m2: " << m2 << std::endl;
-		std::cout << "n1: " << n1 << std::endl;
-		std::cout << "n2: " << n2 << std::endl;
-
 		/// mat = | J1 J2 |
 		/// J1 has m1 cols 
 
@@ -491,7 +489,9 @@ namespace Eigen {
 		// 1) Solve already block diagonal left block to get Q1 and R1
 		begin = clock();
 		m_leftSolver.compute(mat.block(0, 0, n1, m1));
+#ifdef OUTPUT_TIMING
 		std::cout << "m_leftSolver.compute(J1) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
+#endif
 		eigen_assert(m_leftSolver.info() == Success);		
 
 		typename BlockQRSolverLeft::MatrixRType R1 = m_leftSolver.matrixR();
@@ -502,10 +502,12 @@ namespace Eigen {
 #endif
 
 		RightBlockMatrixType J2(n1 + n2, m2);
+		J2.setZero();
 		begin = clock();
 		solveRightBlock<BlockQRSolverRight, BlockQRSolverLeft, StorageIndex>(m1, m2, n1, n2, J2, mat, m_rightSolver, m_leftSolver);
+#ifdef OUTPUT_TIMING
 		std::cout << "solveRightBlock ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-
+#endif
 		typename BlockQRSolverRight::PermutationType cp2 = m_rightSolver.colsPermutation();
 		typename BlockQRSolverRight::PermutationType rp2 = m_rightSolver.rowsPermutation();
 		const typename BlockQRSolverRight::MatrixRType& R2 = m_rightSolver.matrixR();

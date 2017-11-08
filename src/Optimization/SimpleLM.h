@@ -1,3 +1,11 @@
+//
+// Copyright (C) 2017 Jan Svoboda <jan.svoboda@usi.ch>
+// Copyright (C) 2016 Andrew Fitzgibbon <awf@microsoft.com>
+//
+// Reimplementation of Matlab template LM imlementation found in AWF Utility Library:
+// https://github.com/awf/awful/blob/master/matlab/au_levmarq.m
+//
+
 #ifndef SIMPLELM_H
 #define SIMPLELM_H
 
@@ -99,32 +107,109 @@ namespace Eigen {
 		void initQRSolver(QRSolver &) {}
 	};
 
-	template <typename _FunctorType>
-	class SimpleLM {
-	public:
+	namespace SimpleLMInfo {
 		enum Status {
 			NotStarted = -2,
 			Running = -1,
 			Success = 0,
-			TooManyFunctionEvaluation = 1,
-			MaxItersReached = 2,
-			ExceededLambdaMax = 3
+			ExceededLambdaMax = 1,
+			TooManyFunctionEvaluation = 2,
+			MaxItersReached = 3
 		};
 
-		template <typename Scalar>
-		struct LMParams {
-			Scalar lambdaMin;
-			Scalar lambdaMax;
-			Scalar lambdaDecrease;
-			Scalar lambdaIncreaseBase;
-			Scalar lambdaInit;
-			Scalar tolFun;
+		std::string statusToString(const Status &status) {
+			switch (status) {
+			case Status::NotStarted:
+				return "Not Started";
+			case Status::Running:
+				return "Running";
+			case Status::Success:
+				return "Success (Energy Flatlined)";
+			case Status::ExceededLambdaMax:
+				return "Success (Exceeded Maximum Lambda)";
+			case Status::TooManyFunctionEvaluation:
+				return "Too Many Function Evaluations";
+			case Status::MaxItersReached:
+				return "Maximum Iterations Reached";
+			}
+		}
 
-			LMParams()
-				: lambdaMin(1e-12), lambdaMax(1e10), lambdaDecrease(2), lambdaIncreaseBase(10), lambdaInit(1e-4), tolFun(1e-8) {
+		void outputHeader() {
+			//std::cout << "##################################################" << std::endl;
+			//std::cout << "################### Simple LM ####################" << std::endl;
+			//std::cout << "##################################################" << std::endl;
+			std::cout << "--------------------------------------------------" << std::endl;
+		}
+
+		void outputFooter() {
+			//std::cout << "##################################################" << std::endl;
+			std::cout << "--------------------------------------------------" << std::endl;
+		}
+
+		void outputIterHeader() {
+			std::cout << " Iter";
+			std::cout << std::setw(15) << "f";
+			std::cout << std::setw(15) << "|df|_2";
+			std::cout << std::setw(15) << "Elapsed" << std::endl;
+			std::cout << "--------------------------------------------------" << std::endl;
+		}
+
+		template<typename Index, typename Scalar>
+		void outputIter(const Index iterIdx, const Scalar &fVal, const Scalar &normGrad, const Scalar &elapsedTime) {
+			std::cout << std::setw(5) << iterIdx;
+			std::cout << std::setw(15) << fVal;
+			std::cout << std::setw(15) << normGrad;
+			std::cout << std::setw(14) << elapsedTime << "s";
+			std::cout << std::endl;
+		}
+	}
+
+	/**
+	* \brief Performs non linear optimization over a non-linear function,
+	* using a simple variant of the Levenberg Marquardt algorithm.
+	*
+	* In each inner iteration:
+	* Does a variety of line-searches using current Jacobian,
+	* varying lambda each time, as well as lambdaIncrease.
+	* This attempts to get to large lambda as fast as possible
+	* if we are rejecting, so that the only convergence
+	* criterion is large lambda (i.e. we stop when gradient
+	* descent with a tiny step cannot reduce the function).
+	*
+	* Check wikipedia for more information on LM algorithm.
+	* http://en.wikipedia.org/wiki/Levenberg%E2%80%93Marquardt_algorithm
+	*/
+	template <typename _FunctorType, bool Verbose = false>
+	class SimpleLM {
+	public:
+		// Lambda initial parameters
+		template <typename Scalar>
+		struct Lambda {
+			Scalar min;
+			Scalar max;
+			Scalar decrease;
+			Scalar increaseBase;
+			Scalar init;
+
+			Lambda() 
+				: min(1e-12), max(1e10), decrease(2), increaseBase(2), init(1e-4) {
 			}
 		};
 
+		// LM initial parameters 
+		template <typename Scalar, typename Index>
+		struct LMParams {
+			Lambda<Scalar> lambda;
+			Scalar tolFun;
+			Index maxIter;
+			Index maxFunEv;
+
+			LMParams()
+				: lambda(Lambda<Scalar>()), tolFun(1e-8), maxIter(1e6), maxFunEv(1e6) {
+			}
+		};
+
+		// Optimization parameters - variable
 		template <typename Scalar, typename Index>
 		struct OptimParams {
 			Scalar lambda;
@@ -132,9 +217,9 @@ namespace Eigen {
 			Index funEvals;
 			Index iter;
 
-			void initialize(LMParams<Scalar> &lmParams) {
-				this->lambda = lmParams.lambdaInit;
-				this->lambdaIncrease = lmParams.lambdaIncreaseBase;
+			void initialize(LMParams<Scalar, Index> &lmParams) {
+				this->lambda = lmParams.lambda.init;
+				this->lambdaIncrease = lmParams.lambda.increaseBase;
 				this->funEvals = 0;
 				this->iter = 0;
 			}
@@ -151,18 +236,23 @@ namespace Eigen {
 		typedef typename FunctorType::ValueType ValueType;
 		typedef typename FunctorType::StepType StepType;
 
-		const Index HistorySize = 10;
+		// How many values to keep in energy history
+		const Index EnergyHistorySize = 10;
 
 		SimpleLM(FunctorType &functor)
 			: m_functor(functor),
-			m_maxIter(1e6),
-			m_maxFunEv(1e6),
-			m_fdDelta(1e-5),
-			m_status(Status::NotStarted) {
-
+			m_status(SimpleLMInfo::Status::NotStarted) {
+		}
+		
+		LMParams<Scalar, StorageIndex>& lmParams() {
+			return this->m_lmParams;
 		}
 
-		Status minimize(InputType &x) {
+		SimpleLMInfo::Status minimize(InputType &x) {
+			if(Verbose) {
+				SimpleLMInfo::outputHeader();
+			}
+
 			// Initialize optimization parameters
 			m_optParams.initialize(m_lmParams);
 
@@ -170,35 +260,45 @@ namespace Eigen {
 			m_functor.initQRSolver(m_solver);
 
 			// Allocate variables
-			Index n = m_functor.inputs();
-			Index m = m_functor.values();
-			m_residuals.resize(m);
-			m_jacobian.resize(m, n);
-			m_jacLambda.resize(m + n, n);
+			Index nc = m_functor.inputs();
+			Index nr = m_functor.values();
+			m_residuals.resize(nr);
+			m_jacobian.resize(nr, nc);
+			m_jacLambda.resize(nr + nc, nc);
 			m_jacLambda.setZero();
 
 			// Allocate vector of history fvals
-			m_fValHistory = std::vector<Scalar>(10, Scalar(0));
+			m_energyHistory = std::vector<Scalar>(10, Scalar(0));
 
 			SparseMatrix<Scalar, RowMajor, StorageIndex> I(m_jacobian.cols(), m_jacobian.cols());
 			I.setIdentity();
 
 			// Iterate
-			m_status = Status::Running;
-			ValueType JtRes;
+			m_status = SimpleLMInfo::Status::Running;
+			ValueType JtRes, jacColNorms;
+			InputType xTest;
 			bool stopNow = false;
+			
+			if (Verbose) {
+				SimpleLMInfo::outputIterHeader();
+			}
+			clock_t iterStart;
 			while (true) {
+				if (Verbose) {
+					iterStart = clock();
+				}
+
 				// Another iteration
 				m_optParams.iter++;
 
 				// If max iters were reached
-				if (m_optParams.iter > m_maxIter) {
-					m_status = Status::MaxItersReached;
+				if (m_optParams.iter > m_lmParams.maxIter) {
+					m_status = SimpleLMInfo::Status::MaxItersReached;
 					break;
 				}
 				// Too many function evaluatoins
-				if (m_optParams.funEvals > m_maxFunEv) {
-					m_status = Status::TooManyFunctionEvaluation;
+				if (m_optParams.funEvals > m_lmParams.maxFunEv) {
+					m_status = SimpleLMInfo::Status::TooManyFunctionEvaluation;
 					break;
 				}
 
@@ -207,29 +307,26 @@ namespace Eigen {
 				m_optParams.funEvals++;
 
 				// Compute sum of squares of the residual
-				m_fVal = m_residuals.squaredNorm();	
+				m_energy = m_residuals.squaredNorm();
 
 				// Compute Jacobian
 				m_functor.df(x, m_jacobian);
 
 				JtRes = m_jacobian.transpose() * m_residuals;
 
-				// Compute norm estimate and preconditioner for PCG
-				m_colNorms.resize(m_jacobian.cols());
+				// Compute gradient norm estimate 
+				jacColNorms.resize(m_jacobian.cols());
 				for (int c = 0; c < m_jacobian.cols(); c++) {
-					m_colNorms(c) = m_jacobian.col(c).blueNorm();
+					jacColNorms(c) = m_jacobian.col(c).blueNorm();
 				}
-				//m_colNorms = m_jacobian.colwise().blueNorm();	// There's no colwise for sparse matrices ...
-				m_normEst = m_colNorms.mean();
-
+				m_normEst = jacColNorms.mean();
+	
 				// Prepare copy of x for testing
-				InputType xTest = x;
+				xTest = x;
 				while(true) {
 					// Run QR on J with lambdas
 					/// | J      | = | e |
 					/// | l_diag | = | 0 |
-					//VectorType diagLambda = VectorType::Ones(m_jacobian.cols());
-					//diagLambda *= m_optParams.lambda;
 					// Rowpermute the diagonal lambdas into Jacobian
 					// Always place lambda below the last element of each column
 					QRSolver::PermutationMatrixType rowPerm(m_jacobian.rows() + m_jacobian.cols());
@@ -249,7 +346,6 @@ namespace Eigen {
 						currRow++;
 					}
 					// Conservative resize jacobian so that it can be concatenated with the new rows
-					//m_jacobian.conservativeResize(m_jacobian.rows() + m_jacobian.cols(), m_jacobian.cols());
 					SparseMatrix<Scalar, RowMajor, StorageIndex> jacRm(m_jacLambda);
 					jacRm.topRows(m_jacobian.rows()) = m_jacobian;
 					jacRm.bottomRows(m_jacobian.cols()) = I * m_optParams.lambda;
@@ -260,49 +356,57 @@ namespace Eigen {
 					// Ax = b -> QRx = b
 					m_solver.compute(m_jacLambda);
 					// Append zeros corresponding to lambdas to the residual vector and rowpermute
-					ValueType resTmp(m + n);
+					ValueType resTmp(nr + nc);
 					resTmp.setZero();
-					for (int r = 0; r < m; r++) {
+					for (int r = 0; r < nr; r++) {
 						resTmp(rowPerm.indices()(r)) = m_residuals(r);
 					}
+
 					// Compute Q.T * b
+					//resTmp.head(nc) = m_solver.colsPermutation() * resTmp.head(nc);
 					ValueType qtb = m_solver.matrixQ().transpose() * resTmp;
-					qtb.head(n) = m_solver.colsPermutation() * qtb.head(n);
+					//qtb.head(nc) = m_solver.colsPermutation() * qtb.head(nc);
 					// And compute the step
 					m_dx = m_solver.matrixR().topLeftCorner(m_jacobian.cols(), m_jacobian.cols()).template triangularView<Upper>().solve(qtb.head(m_jacobian.cols()));
+					// Inverse colpermute the step update - so that it corresponds to the original x values ??? FixMe: jasvob - is this needed?
 
+					std::cout << m_solver.colsPermutation().indices() << std::endl;
+
+					m_dx = m_solver.colsPermutation() * m_dx;
+										
 					// Compute new step test values
 					// Perform test update
-					//m_dx = -m_dx;
+					m_dx = -m_dx;	// We want to go in the negative gradient direction
 					m_functor.increment_in_place(&xTest, m_dx);
 					// Test residuals
-					ValueType residualsTest(m);
+					ValueType residualsTest(nr);
 					m_functor(xTest, residualsTest);
 					m_optParams.funEvals++;
 					// Test energy
-					Scalar fValTest = residualsTest.squaredNorm();
+					Scalar energyTest = residualsTest.squaredNorm();
 
 					// Decide what to do next
-					if (fValTest < m_fVal) {
-						Scalar rhoScale = m_dx.transpose() * (m_optParams.lambda * m_dx + JtRes);
-						Scalar rho = (m_fVal - fValTest) / rhoScale;
-						Scalar lambdaMul = 1 - (2 * rho - 1);
-						lambdaMul = lambdaMul * lambdaMul * lambdaMul;
+					if (energyTest < m_energy) {
+						//JtRes = m_jacLambda.transpose() * resTmp;
 
+						Scalar rhoScale = m_dx.transpose() * (m_optParams.lambda * m_dx + JtRes);
+						Scalar rho = (m_energy - energyTest) / rhoScale;
+						Scalar lambdaMul = 1.0 - std::pow(2.0 * rho - 1.0, 3);
+						
 						m_optParams.lambda *= std::max(1.0 / 3.0, lambdaMul);
-						m_optParams.lambda = std::max(m_optParams.lambda, m_lmParams.lambdaMin);
+						m_optParams.lambda = std::max(m_optParams.lambda, m_lmParams.lambda.min);
 
 						// Reset lambda incraese
-						m_optParams.lambdaIncrease = 2; // m_lmParams.lambdaIncreaseBase
+						m_optParams.lambdaIncrease = m_lmParams.lambda.increaseBase;
 						// Update current fval
-						m_fVal = fValTest;
+						m_energy = energyTest;
 						// Insert to the history
-						m_fValHistory[m_optParams.iter % HistorySize] = m_fVal;
+						m_energyHistory[m_optParams.iter % EnergyHistorySize] = m_energy;
 						// Break here
 						break;
 					} else {
-						if (m_optParams.lambda > m_lmParams.lambdaMax) {
-							m_status = Status::ExceededLambdaMax;
+						if (m_optParams.lambda > m_lmParams.lambda.max) {
+							m_status = SimpleLMInfo::Status::ExceededLambdaMax;
 							stopNow = true;
 							break;
 						}
@@ -320,23 +424,30 @@ namespace Eigen {
 					break;
 				}
 
-				// Check cgce
-				if (m_optParams.iter > HistorySize) {
+				// Check for energy flatlining
+				if (m_optParams.iter > EnergyHistorySize) {
 					Scalar meanf = 0.0;
-					for (auto it = m_fValHistory.begin(); it != m_fValHistory.end(); ++it) {
+					for (auto it = m_energyHistory.begin(); it != m_energyHistory.end(); ++it) {
 						meanf += *it;
 					}
-					meanf /= m_fValHistory.size();
-					if (std::abs(m_fVal - meanf) < m_lmParams.tolFun * m_fVal) {
-						m_status = Status::Success;
+					meanf /= m_energyHistory.size();
+					if (std::abs(m_energy - meanf) < m_lmParams.tolFun * m_energy) {
+						m_status = SimpleLMInfo::Status::Success;
 						break;
 					}
+				}
+
+				if (Verbose) {
+					SimpleLMInfo::outputIter<Index, Scalar>(m_optParams.iter, m_energy, m_normEst, double(clock() - iterStart) / CLOCKS_PER_SEC);
 				}
 
 				// After successive iteration, record new x and loop
 				x = xTest;
 			}
 
+			if (Verbose) {
+				SimpleLMInfo::outputFooter();
+			}
 
 			return m_status;
 		}
@@ -348,32 +459,27 @@ namespace Eigen {
 		QRSolver m_solver;
 		// Jacobian matrix
 		JacobianType m_jacobian;
+		// Jacobian matrix combined with diagonal matrix of lambdas
 		JacobianType m_jacLambda;
 		// Residuals
 		ValueType m_residuals;
 		// Current function value (objective)
-		Scalar m_fVal;
-		// Jacobian column norms 
-		ValueType m_colNorms;
-		// Norm estimate
+		Scalar m_energy;
+		// Gradient norm estimate
 		Scalar m_normEst;
 		// Step
 		StepType m_dx;
 
 		// History of fvals
-		std::vector<Scalar> m_fValHistory;
-
-		StorageIndex m_maxIter;
-		StorageIndex m_maxFunEv;
-		Scalar m_fdDelta;
+		std::vector<Scalar> m_energyHistory;
 
 		// LM paramters
-		LMParams<Scalar> m_lmParams;
+		LMParams<Scalar, StorageIndex> m_lmParams;
 		// Optimization parameters
 		OptimParams<Scalar, StorageIndex> m_optParams;
 
 		// LM status
-		Status m_status;
+		SimpleLMInfo::Status m_status;
 	};
 }
 
