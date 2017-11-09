@@ -73,7 +73,7 @@ void BAFunctor::initQRSolver(SchurlikeQRSolver &qr) {
 	//int blkRows = 2;
 	//int blkCols = 3;
 	//int blockOverlap = 0;
-	qr.setSparseBlockParams(this->measurements.cols() * 2, this->numPointParams);
+	qr.setSparseBlockParams(this->measurements.cols() * 2 + this->numPointParams, this->numPointParams);
 	//qr.getLeftSolver().setPattern(data_points.cols() * blkRows, data_points.cols() * (blkCols - blockOverlap), blkRows, blkCols, blockOverlap);
 }
 

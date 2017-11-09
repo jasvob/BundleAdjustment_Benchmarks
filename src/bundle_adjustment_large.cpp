@@ -18,8 +18,6 @@
 #include "Utils.h"
 #include "MathUtils.h"
 
-#include "Optimization/SimpleLM.h"
-
 enum ReturnCodes {
 	Success = 0,
 	WrongInputParams = 1,
@@ -34,44 +32,10 @@ const double INLIER_THRESHOLD = 0.5;
 
 using namespace Eigen;
 
-struct NewLMFunctor : Eigen::SparseLMFunctor<Scalar, SparseDataType> {
-	typedef Eigen::SparseLMFunctor<Scalar, SparseDataType> Base;
-	typedef typename Base::JacobianType JacobianType;
-
-	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > DenseBlockSolver;
-	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseBlockSolver> LeftSuperBlockSolver;
-	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<SparseDataType>, 10, true> RightSuperBlockSolver;
-	typedef BlockAngularSparseQR_Ext<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
-	typedef SchurlikeQRSolver QRSolver;
-
-	NewLMFunctor()
-		: Base(10, 5) {
-
-	}
-
-	int operator()(const InputType& x, ValueType& fvec) {
-
-	}
-
-	int df(const InputType& x, JacobianType& fjac) {
-
-	}
-
-	void increment_in_place(InputType* x, StepType const& p) {
-
-	}
-
-	void initQRSolver(SchurlikeQRSolver &qr) {
-	}
-};
-
 int main(int argc, char * argv[]) {
 	Logger::createLogger("runtime_log.log");
 	Logger::instance()->log(Logger::Info, "Computation STARTED!");
-
-	NewLMFunctor fctor;
-	SimpleLM<NewLMFunctor> lmar(fctor);
-	
+		
 	/***************** Check input parameters *****************/
 	if (argc != 2) {
 		std::cerr << "Usage: " << argv[0] << " <sparse reconstruction file>" << std::endl;
@@ -195,15 +159,11 @@ int main(int argc, char * argv[]) {
 	//*/
 
 	// Craete the LM optimizer
-	Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor);
-	lm.setVerbose(true);
-	lm.setMaxfev(40);
-	//lm.setExternalScaling(1e-3);
-	//lm.setFactor(1e-3);
-	
+	Eigen::BacktrackLevMarq< OptimizationFunctor, true > lm(functor);
+
 	// Run optimization
 	clock_t begin = clock();
-	Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
+	Eigen::BacktrackLevMarqInfo::Status info = lm.minimize(params);
 	std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 	
 	/***************** Show statistics after the optimization *****************/

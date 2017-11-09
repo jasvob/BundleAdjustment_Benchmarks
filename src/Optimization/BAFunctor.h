@@ -6,12 +6,7 @@
 #include <Eigen/SparseCore>
 
 #include <unsupported/Eigen/MatrixFunctions>
-//#include <unsupported/Eigen/LevenbergMarquardt>
-#include "../Eigen_ext/LevenbergMarquardt/LevenbergMarquardt.h"
-#include "../Eigen_ext/LevenbergMarquardt/LMqrsolv.h"
-#include "../Eigen_ext/LevenbergMarquardt/LMpar.h"
-#include "../Eigen_ext/LevenbergMarquardt/LMcovar.h"
-#include "../Eigen_ext/LevenbergMarquardt/LMonestep.h"
+#include <unsupported/Eigen/BacktrackLevMarq>
 #include <unsupported/Eigen/SparseExtra>
 #include <unsupported/Eigen/SparseQRExtra>
 
@@ -20,11 +15,6 @@
 #include <suitesparse/SuiteSparseQR.hpp>
 #include <Eigen/src/CholmodSupport/CholmodSupport.h>
 #include <Eigen/src/SPQRSupport/SuiteSparseQRSupport.h>
-
-#include "../BlockDiagonalSparseQR_Ext.h"
-#include "../DenseBlockedThinSparseQR.h"
-
-#include "../BlockAngularSparseQR_Ext.h"
 
 #include "../CameraMatrix.h"
 #include "../DistortionFunction.h"
@@ -42,8 +32,8 @@ using namespace Eigen;
 //typedef SuiteSparse_long SparseDataType;
 typedef int SparseDataType;
 
-struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
-	typedef Eigen::SparseFunctor<Scalar, SparseDataType> Base;
+struct BAFunctor : Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> {
+	typedef Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> Base;
 	typedef typename Base::JacobianType JacobianType;
 
 	// Variables for optimization live in InputType
@@ -118,23 +108,13 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	// QR solver is concatenation of the above.
 	//typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > DenseBlockSolver;
-	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseBlockSolver> LeftSuperBlockSolver;
+	typedef BlockDiagonalSparseQR<JacobianType, DenseBlockSolver> LeftSuperBlockSolver;
 	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<SparseDataType>, 10, true> RightSuperBlockSolver;
-	typedef BlockAngularSparseQR_Ext<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
+	typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	//typedef SPQR<JacobianType> SchurlikeQRSolver;
 
 	//typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	typedef SchurlikeQRSolver QRSolver;
-
-
-	typedef SparseMatrix<Scalar, RowMajor, Index> FactorType;
-	typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
-	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > LMDenseBlockSolver;
-	typedef BlockDiagonalSparseQR_Ext<FactorType, LMDenseBlockSolver> LMLeftBlkSolver;
-	typedef DenseBlockedThinQR<DenseMatrix, NaturalOrdering<Index>, 10, true> LMRightBlkSolver;
-	typedef BlockAngularSparseQR_Ext<FactorType, LMLeftBlkSolver, LMRightBlkSolver> LMSchurlikeQRSolver;
-	typedef LMSchurlikeQRSolver QRSolverInner;
-
 
 	// And tell the algorithm how to set the QR parameters.
 	virtual void initQRSolver(SchurlikeQRSolver &qr);
