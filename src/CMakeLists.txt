@@ -59,9 +59,8 @@ ADD_EXECUTABLE(Bundle_Adjustment_Bench
 	
 TARGET_LINK_LIBRARIES(Bundle_Adjustment_Bench ${SSP_LIB})
 
-# Tests
-ADD_EXECUTABLE(Bundle_Adjustment_Solver_Test
-	bundle_adjustment_solver_test.cpp
+ADD_EXECUTABLE(Bundle_Adjustment_Large
+	bundle_adjustment_large.cpp
 	Logger.cpp
 	Optimization/BAFunctor.cpp
 	CameraMatrix.cpp
@@ -72,74 +71,6 @@ ADD_EXECUTABLE(Bundle_Adjustment_Solver_Test
 	DistortionFunction.h
 	Utils.h
 	MathUtils.h
-	BlockAngularSparseQR_Ext.h
-	BlockDiagonalSparseQR_Ext.h
-	BandedBlockedSparseQR_Ext.h
-	SparseBlockCOO_Ext.h
-	SparseQR_Ext.h
 	)
 	
-TARGET_LINK_LIBRARIES(Bundle_Adjustment_Solver_Test ${SSP_LIB})
-
-ADD_EXECUTABLE(Bundle_Adjustment_Solver_New
-	bundle_adjustment_solver_new.cpp
-	Logger.cpp
-	Optimization/BAFunctor.cpp
-	CameraMatrix.cpp
-	DistortionFunction.cpp
-	Logger.h
-	Optimization/BAFunctor.h
-	CameraMatrix.h
-	DistortionFunction.h
-	Utils.h
-	MathUtils.h
-	BlockAngularSparseQR_Ext.h
-	BlockDiagonalSparseQR_Ext.h
-	BandedBlockedSparseQR_Ext.h
-	SparseBlockCOO_Ext.h
-	SparseQR_Ext.h
-	)
-	
-TARGET_LINK_LIBRARIES(Bundle_Adjustment_Solver_New ${SSP_LIB})
-
-ADD_EXECUTABLE(LevMar_Solver_Test
-	levmar_solver_test.cpp
-	Logger.cpp
-	Optimization/BAFunctor.cpp
-	CameraMatrix.cpp
-	DistortionFunction.cpp
-	Logger.h
-	Optimization/BAFunctor.h
-	CameraMatrix.h
-	DistortionFunction.h
-	Utils.h
-	MathUtils.h
-	BlockAngularSparseQR_Ext.h
-	BlockDiagonalSparseQR_Ext.h
-	BandedBlockedSparseQR_Ext.h
-	SparseBlockCOO_Ext.h
-	SparseQR_Ext.h
-	)
-	
-TARGET_LINK_LIBRARIES(LevMar_Solver_Test ${SSP_LIB})
-
-ADD_EXECUTABLE(SimpleLM_Test
-	simplelm_test.cpp
-	Logger.cpp
-	CameraMatrix.cpp
-	DistortionFunction.cpp
-	Logger.h
-	Optimization/SimpleLM.h
-	CameraMatrix.h
-	DistortionFunction.h
-	Utils.h
-	MathUtils.h
-	BlockAngularSparseQR_Ext.h
-	BlockDiagonalSparseQR_Ext.h
-	BandedBlockedSparseQR_Ext.h
-	SparseBlockCOO_Ext.h
-	SparseQR_Ext.h
-	)
-	
-TARGET_LINK_LIBRARIES(SimpleLM_Test ${SSP_LIB})
-
+TARGET_LINK_LIBRARIES(Bundle_Adjustment_Large ${SSP_LIB})
