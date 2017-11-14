@@ -18,6 +18,8 @@
 #include "Utils.h"
 #include "MathUtils.h"
 
+#include <unsupported/Eigen/NumericalDiff>
+
 enum ReturnCodes {
 	Success = 0,
 	WrongInputParams = 1,
@@ -107,7 +109,7 @@ int main(int argc, char * argv[]) {
 		data, measurements, correspondingView, correspondingPoint);
 	Utils::showObjective(avg_focal_length, INLIER_THRESHOLD, cams, distortions,
 		data, measurements, correspondingView, correspondingPoint);
-		
+
 	/***************** Setup and run the optimization *****************/
 	Eigen::VectorXd weights = Eigen::VectorXd::Ones(measurements.cols());
 		

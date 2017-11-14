@@ -31,9 +31,11 @@ using namespace Eigen;
 //typedef Index SparseDataType;
 //typedef SuiteSparse_long SparseDataType;
 typedef int SparseDataType;
+typedef double Scalar;
+typedef Matrix<Scalar, Dynamic, 1> VectorX;
 
-struct BAFunctor : Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> {
-	typedef Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> Base;
+struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
+	typedef Eigen::SparseFunctor<Scalar, SparseDataType> Base;
 	typedef typename Base::JacobianType JacobianType;
 
 	// Variables for optimization live in InputType
@@ -146,7 +148,7 @@ struct BAFunctor : Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> {
 	inline double psi_hat(double const tau2, double const r2, double const w2) { return w2*r2 + tau2 / 2.0*(w2 - 1)*(w2 - 1); }
 
 	Vector2d projectPoint(const CameraMatrix &cam, const DistortionFunction &distortion, const Vector3d &X) {
-		Vector3d XX = cam.transformDirectionIntoCameraSpace(X);
+		Vector3d XX = cam.transformPointIntoCameraSpace(X);
 		Vector2d xu(XX(0) / XX(2), XX(1) / XX(2));
 		Vector2d xd = distortion(xu);
 		return cam.getFocalLength() * xd;
@@ -161,15 +163,17 @@ struct BAFunctor : Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> {
 			int point = correspondingPoint[i];
 
 			// Project 3D point into corresponding camera view
-			Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
-			//Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			//Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
 			Eigen::Vector2d r = (q - measurements.col(i));
 
 			double sqrt_psi = sqrt(psi(sqrInlierThreshold, r.squaredNorm()));
 			double rnorm_r = 1.0 / std::max(eps_psi_residual, r.norm());
 
 			// Compute residual for the point
-			fvec.segment<2>(i * 2) = r.cwiseProduct(Eigen::Vector2d(sqrt_psi * rnorm_r, sqrt_psi * rnorm_r));
+			fvec(i * 2 + 0) = r(0) * sqrt_psi * rnorm_r;
+			fvec(i * 2 + 1) = r(1) * sqrt_psi * rnorm_r;
+			//fvec.segment<2>(i * 2) = r.cwiseProduct(Eigen::Vector2d(sqrt_psi * rnorm_r, sqrt_psi * rnorm_r));
 			//fvec.segment<2>(point * x.nCameras() + view) = q - measurements.col(i);
 
 			/*if (i == 0) {
@@ -257,9 +261,16 @@ struct BAFunctor : Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> {
 
 			// Compute outer derivative from psi residual
 			double sqrInlierThreshold = this->inlierThreshold * this->inlierThreshold;
-			const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
-			//const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			//const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
 			const Vector2d r = q - measurements.col(i);
+
+    /*  if (i == 0)
+      {
+        std::cout << "pt = " << x.data_points.col(point) << std::endl;
+        std::cout << "q = " << q << std::endl;
+        std::cout << "measurements.col(i) = " << measurements.col(i) << std::endl;
+      }*/
 			const double r2 = r.squaredNorm();
 			const double W = psi_weight(sqrInlierThreshold, r2);
 			const double sqrt_psi = sqrt(psi(sqrInlierThreshold, r2));
@@ -326,18 +337,23 @@ struct BAFunctor : Eigen::SparseLevMarqFunctor<Scalar, SparseDataType> {
 			//std::cout << i * 2 << ", " << pt_base + point * numPointCoords << ":\n" << dp_dX << "----" << std::endl;
 	
 			// Multiply block with outer deriv
+
+    /*  if (i == 0) {
+        std::cout << "Bef" << std::endl;
+        std::cout << Jblock << std::endl;
+      }*/
 			Jblock = outer_deriv * Jblock;
 
-			/*if (i == 0)
+	/*		if (i == 0)
 			{
 				std::cout << "r2 = " << r2 << " W = " << W << " sqrt_psi = " << sqrt_psi << std::endl;
 				std::cout << "outer_deriv = " << outer_deriv << std::endl;
-			}*/
+			}
 
-			/*if (i == 0) {
+			if (i == 0) {
 				std::cout << Jblock << std::endl;
-			}*/
-
+			}
+      */
 			// Fill into the Jacobian
 			// Set deriv wrt camera parameters
 			jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 0, Jblock(0, 7));
