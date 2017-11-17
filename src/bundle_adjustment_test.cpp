@@ -19,7 +19,6 @@
 #include "MathUtils.h"
 
 #include <unsupported/Eigen/NumericalDiff>
-#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/TrustRegionLevMarq.h>
 
 enum ReturnCodes {
 	Success = 0,
@@ -53,21 +52,28 @@ int main(int argc, char * argv[]) {
 
 	/***************** Read input data from file *****************/
 	const double avg_focal_length = AVG_FOCAL_LENGTH;
-
+ 
+  std::default_random_engine gen;
+  std::uniform_real_distribution<double> dist(0.5, 5.0);
 	int N, M, K;
-	ifs >> N >> M >> K;
+  N = 3;
+  M = 400;
+  K = N * M;
 	std::cout << "N(cameras) = " << N << ", M(points) = " << M << ", K(measurements) = " << K << std::endl;
 
 	// Read image measurements data
 	std::cout << "Reading image measurements..." << std::endl;
 	Eigen::Matrix2Xd measurements(2, K);
-	std::vector<int> correspondingView(K, -1);
-	std::vector<int> correspondingPoint(K, -1);
-	for (int k = 0; k < K; ++k) {
-		ifs >> correspondingView[k];
-		ifs >> correspondingPoint[k];
-		ifs >> measurements(0, k) >> measurements(1, k);
-		measurements.col(k) /= avg_focal_length;
+	std::vector<int> correspondingView;
+	std::vector<int> correspondingPoint;
+	for (int p = 0; p < M; ++p) {
+    for (int c = 0; c < N; c++) {
+      correspondingView.push_back(c);
+      correspondingPoint.push_back(p);
+      measurements(0, p * N + c) = dist(gen);
+      measurements(1, p * N + c) = dist(gen);
+      measurements.col(p * N + c) /= avg_focal_length;
+    }
 	}
 	std::cout << "Done." << std::endl;
 
@@ -79,9 +85,10 @@ int main(int argc, char * argv[]) {
 	for (int i = 0; i < N; ++i) {
 		Eigen::Vector3d om, T;
 		double f, k1, k2;
-		ifs >> om(0) >> om(1) >> om(2);
-		ifs >> T(0) >> T(1) >> T(2);
-		ifs >> f >> k1 >> k2;
+		om << dist(gen), dist(gen), dist(gen);
+		T << dist(gen), dist(gen), dist(gen);
+    f = dist(gen);
+    k1 = dist(gen); k2 = dist(gen);
 
 		Eigen::Matrix3d K = Eigen::Matrix3d::Identity();
 		K(0, 0) = K(1, 1) = -f / avg_focal_length;
@@ -101,7 +108,7 @@ int main(int argc, char * argv[]) {
 	std::cout << "Reading 3D points..." << std::endl;
 	Eigen::Matrix3Xd data(3, M);
 	for (int j = 0; j < M; ++j) {
-		ifs >> data(0, j) >> data(1, j) >> data(2, j);
+    data.col(j) << dist(gen), dist(gen), dist(gen);
 	}
 	std::cout << "Done." << std::endl;
 
@@ -162,24 +169,12 @@ int main(int argc, char * argv[]) {
 	//*/
 
 	// Craete the LM optimizer
-  ///*
 	Eigen::BacktrackLevMarq< OptimizationFunctor, true > lm(functor);
 
 	// Run optimization
 	clock_t begin = clock();
 	Eigen::BacktrackLevMarqInfo::Status info = lm.minimize(params);
-  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqInfo::statusToString(info) << std::endl;
-  //*/
-  /*
-  Eigen::TrustRegionLevMarq< OptimizationFunctor, true > lm(functor);
-
-  // Run optimization
-  clock_t begin = clock();
-  Eigen::TrustRegionLevMarqInfo::Status info = lm.minimize(params);
 	std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-  std::cout << "LM finished with status: " << Eigen::TrustRegionLevMarqInfo::statusToString(info) << std::endl;
-  //*/
 	
 	/***************** Show statistics after the optimization *****************/
 	Utils::showErrorStatistics(avg_focal_length, INLIER_THRESHOLD, params.cams, params.distortions,

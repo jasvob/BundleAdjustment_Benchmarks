@@ -18,8 +18,8 @@
 #include "Utils.h"
 #include "MathUtils.h"
 
+#include <unsupported/Eigen/BacktrackLevMarq>
 #include <unsupported/Eigen/NumericalDiff>
-#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/TrustRegionLevMarq.h>
 
 enum ReturnCodes {
 	Success = 0,
@@ -38,7 +38,7 @@ using namespace Eigen;
 int main(int argc, char * argv[]) {
 	Logger::createLogger("runtime_log.log");
 	Logger::instance()->log(Logger::Info, "Computation STARTED!");
-		
+	
 	/***************** Check input parameters *****************/
 	if (argc != 2) {
 		std::cerr << "Usage: " << argv[0] << " <sparse reconstruction file>" << std::endl;
@@ -64,8 +64,10 @@ int main(int argc, char * argv[]) {
 	std::vector<int> correspondingView(K, -1);
 	std::vector<int> correspondingPoint(K, -1);
 	for (int k = 0; k < K; ++k) {
-		ifs >> correspondingView[k];
 		ifs >> correspondingPoint[k];
+    ifs >> correspondingView[k];
+    correspondingView[k] -= 1;
+    correspondingPoint[k] -= 1;
 		ifs >> measurements(0, k) >> measurements(1, k);
 		measurements.col(k) /= avg_focal_length;
 	}
@@ -75,34 +77,29 @@ int main(int argc, char * argv[]) {
 	std::cout << "Reading cameras params..." << std::endl;
 	CameraMatrix::Vector cams(N);
 	DistortionFunction::Vector distortions(N);
-	unsigned int accumulatedPoints = 0;
 	for (int i = 0; i < N; ++i) {
+    Matrix3x4d P = Matrix3x4d::Zero();
 		Eigen::Vector3d om, T;
 		double f, k1, k2;
-		ifs >> om(0) >> om(1) >> om(2);
-		ifs >> T(0) >> T(1) >> T(2);
-		ifs >> f >> k1 >> k2;
+		ifs >> P(0, 0) >> P(0, 1) >> P(0, 2) >> P(0, 3);
+    ifs >> P(1, 0) >> P(1, 1) >> P(1, 2) >> P(1, 3);
+    ifs >> P(2, 0) >> P(2, 1) >> P(2, 2) >> P(2, 3);
+    //ifs >> P(3, 0) >> P(3, 1) >> P(3, 2) >> P(3, 3);
 
-		Eigen::Matrix3d K = Eigen::Matrix3d::Identity();
-		K(0, 0) = K(1, 1) = -f / avg_focal_length;
-		cams[i].setIntrinsic(K);
-		cams[i].setTranslation(T);
+    cams[i] = CameraMatrix(P);
 
-		Eigen::Matrix3d R;
-		Math::createRotationMatrixRodrigues(om, R);
-		cams[i].setRotation(R);
-
-		const double f2 = f * f;
-		distortions[i] = DistortionFunction(k1 * f2, k2 * f2 * f2);
+		distortions[i] = DistortionFunction(0, 0);
 	}
 	std::cout << "Done." << std::endl;
 
 	// Read the data points
-	std::cout << "Reading 3D points..." << std::endl;
-	Eigen::Matrix3Xd data(3, M);
-	for (int j = 0; j < M; ++j) {
+  std::cout << "Reading 3D points..." << std::endl;
+	Eigen::Matrix3Xd data = Eigen::Matrix3Xd::Random(3, M);  
+  /*
+  for (int j = 0; j < M; ++j) {
 		ifs >> data(0, j) >> data(1, j) >> data(2, j);
 	}
+  */
 	std::cout << "Done." << std::endl;
 
 	/***************** Show statistics before the optimization *****************/
@@ -110,10 +107,10 @@ int main(int argc, char * argv[]) {
 		data, measurements, correspondingView, correspondingPoint);
 	Utils::showObjective(avg_focal_length, INLIER_THRESHOLD, cams, distortions,
 		data, measurements, correspondingView, correspondingPoint);
-
+		
 	/***************** Setup and run the optimization *****************/
 	Eigen::VectorXd weights = Eigen::VectorXd::Ones(measurements.cols());
-
+		
 	// Set initial optimization parameters
 	OptimizationFunctor::InputType params;
 	params.cams = cams;
@@ -162,24 +159,15 @@ int main(int argc, char * argv[]) {
 	//*/
 
 	// Craete the LM optimizer
-  ///*
 	Eigen::BacktrackLevMarq< OptimizationFunctor, true > lm(functor);
 
+	//lm.setExternalScaling(1e-3);
+	//lm.setFactor(1e-3);
+	
 	// Run optimization
 	clock_t begin = clock();
 	Eigen::BacktrackLevMarqInfo::Status info = lm.minimize(params);
-  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqInfo::statusToString(info) << std::endl;
-  //*/
-  /*
-  Eigen::TrustRegionLevMarq< OptimizationFunctor, true > lm(functor);
-
-  // Run optimization
-  clock_t begin = clock();
-  Eigen::TrustRegionLevMarqInfo::Status info = lm.minimize(params);
 	std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-  std::cout << "LM finished with status: " << Eigen::TrustRegionLevMarqInfo::statusToString(info) << std::endl;
-  //*/
 	
 	/***************** Show statistics after the optimization *****************/
 	Utils::showErrorStatistics(avg_focal_length, INLIER_THRESHOLD, params.cams, params.distortions,

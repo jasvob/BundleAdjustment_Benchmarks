@@ -1,5 +1,5 @@
-#ifndef BA_FUNCTOR_H
-#define BA_FUNCTOR_H
+#ifndef BA_FUNCTOR_DINO_H
+#define BA_FUNCTOR_DINO_H
 
 #include <Eigen/Eigen>
 
@@ -12,9 +12,6 @@
 
 #include <Eigen/SparseCore>
 #include <Eigen/src/Core/util/DisableStupidWarnings.h>
-#include <suitesparse/SuiteSparseQR.hpp>
-#include <Eigen/src/CholmodSupport/CholmodSupport.h>
-#include <Eigen/src/SPQRSupport/SuiteSparseQRSupport.h>
 
 #include "../CameraMatrix.h"
 #include "../DistortionFunction.h"
@@ -34,7 +31,7 @@ typedef int SparseDataType;
 typedef double Scalar;
 typedef Matrix<Scalar, Dynamic, 1> VectorX;
 
-struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
+struct BAFunctorDino : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	typedef Eigen::SparseFunctor<Scalar, SparseDataType> Base;
 	typedef typename Base::JacobianType JacobianType;
 
@@ -61,7 +58,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	typedef VectorX VectorType;
 		
 	// Functor constructor
-	BAFunctor(const Eigen::Index numPoints, const Eigen::Index numCameras, const Eigen::Matrix2Xd &measurements,
+	BAFunctorDino(const Eigen::Index numPoints, const Eigen::Index numCameras, const Eigen::Matrix2Xd &measurements,
 		const std::vector<int> &correspondingView, const std::vector<int> &correspondingPoint, 
 		double inlierThreshold);
 
@@ -111,7 +108,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	//typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > DenseBlockSolver;
 	typedef BlockDiagonalSparseQR<JacobianType, DenseBlockSolver> LeftSuperBlockSolver;
-	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<SparseDataType>, 8, true> RightSuperBlockSolver;
+	typedef DenseBlockedThinSparseQR<JacobianType, NaturalOrdering<SparseDataType>, 10, true> RightSuperBlockSolver;
 	typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 	//typedef SPQR<JacobianType> SchurlikeQRSolver;
 
@@ -148,7 +145,7 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	inline double psi_hat(double const tau2, double const r2, double const w2) { return w2*r2 + tau2 / 2.0*(w2 - 1)*(w2 - 1); }
 
 	Vector2d projectPoint(const CameraMatrix &cam, const DistortionFunction &distortion, const Vector3d &X) {
-		Vector3d XX = cam.transformPointIntoCameraSpace(X);
+		Vector3d XX = cam.transformDirectionIntoCameraSpace(X);
 		Vector2d xu(XX(0) / XX(2), XX(1) / XX(2));
 		Vector2d xd = distortion(xu);
 		return cam.getFocalLength() * xd;
@@ -163,8 +160,8 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			int point = correspondingPoint[i];
 
 			// Project 3D point into corresponding camera view
-			//Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
-			Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			Eigen::Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			//Eigen::Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
 			Eigen::Vector2d r = (q - measurements.col(i));
 
 			double sqrt_psi = sqrt(psi(sqrInlierThreshold, r.squaredNorm()));
@@ -261,16 +258,9 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 
 			// Compute outer derivative from psi residual
 			double sqrInlierThreshold = this->inlierThreshold * this->inlierThreshold;
-			//const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
-			const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
+			const Vector2d q = x.cams[view].projectPoint(x.distortions[view], x.data_points.col(point));
+			//const Vector2d q = this->projectPoint(x.cams[view], x.distortions[view], x.data_points.col(point));
 			const Vector2d r = q - measurements.col(i);
-
-    /*  if (i == 0)
-      {
-        std::cout << "pt = " << x.data_points.col(point) << std::endl;
-        std::cout << "q = " << q << std::endl;
-        std::cout << "measurements.col(i) = " << measurements.col(i) << std::endl;
-      }*/
 			const double r2 = r.squaredNorm();
 			const double W = psi_weight(sqrInlierThreshold, r2);
 			const double sqrt_psi = sqrt(psi(sqrInlierThreshold, r2));
@@ -337,23 +327,18 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			//std::cout << i * 2 << ", " << pt_base + point * numPointCoords << ":\n" << dp_dX << "----" << std::endl;
 	
 			// Multiply block with outer deriv
-
-    /*  if (i == 0) {
-        std::cout << "Bef" << std::endl;
-        std::cout << Jblock << std::endl;
-      }*/
 			Jblock = outer_deriv * Jblock;
 
-	/*		if (i == 0)
+			/*if (i == 0)
 			{
 				std::cout << "r2 = " << r2 << " W = " << W << " sqrt_psi = " << sqrt_psi << std::endl;
 				std::cout << "outer_deriv = " << outer_deriv << std::endl;
-			}
+			}*/
 
-			if (i == 0) {
+			/*if (i == 0) {
 				std::cout << Jblock << std::endl;
-			}
-      */
+			}*/
+
 			// Fill into the Jacobian
 			// Set deriv wrt camera parameters
 			jvals.add(i * 2 + 0, cam_base + view * numCamParams + radialParamsOffset + 0, Jblock(0, 7));
@@ -440,10 +425,11 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 		Index radialParamsOffset = 7;
 
 		// Update camera parameters
+    /*
 		Eigen::Vector3d T, omega;
 		Eigen::Matrix3d R0, dR;
 		for (int i = 0; i < x->nCameras(); i++) {
-      T = x->cams[i].getTranslation();
+			T = x->cams[i].getTranslation();
 			T += p.segment<3>(cam_base + i * numCamParams);
 			x->cams[i].setTranslation(T);
 
@@ -453,15 +439,15 @@ struct BAFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			Math::createRotationMatrixRodrigues(omega, dR);
 			x->cams[i].setRotation(dR * R0);
 
-			x->distortions[i].k1() += p(cam_base + i * numCamParams + radialParamsOffset);
-			x->distortions[i].k2() += p(cam_base + i * numCamParams + radialParamsOffset + 1);
+			x->distortions[i].k1() += p[cam_base + i * numCamParams + radialParamsOffset];
+			x->distortions[i].k2() += p[cam_base + i * numCamParams + radialParamsOffset + 1];
 		
 			Eigen::Matrix3d K = x->cams[i].getIntrinsic();
-			K(0, 0) += p(cam_base + i * numCamParams + focalLengthOffset);
-			K(1, 1) += p(cam_base + i * numCamParams + focalLengthOffset);
+			K(0, 0) += p[cam_base + i * numCamParams + focalLengthOffset];
+			K(1, 1) += p[cam_base + i * numCamParams + focalLengthOffset];
 			x->cams[i].setIntrinsic(K);
 		}
-
+    */
 
 		// Update 3d point positions
 		for (int i = 0; i < x->nDataPoints(); i++) {

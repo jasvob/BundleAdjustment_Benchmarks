@@ -74,3 +74,19 @@ ADD_EXECUTABLE(Bundle_Adjustment_Large
 	)
 	
 TARGET_LINK_LIBRARIES(Bundle_Adjustment_Large ${SSP_LIB})
+
+ADD_EXECUTABLE(Bundle_Adjustment_Dino
+	bundle_adjustment_dino.cpp
+	Logger.cpp
+	Optimization/BAFunctor.cpp
+	CameraMatrix.cpp
+	DistortionFunction.cpp
+	Logger.h
+	Optimization/BAFunctor.h
+	CameraMatrix.h
+	DistortionFunction.h
+	Utils.h
+	MathUtils.h
+	)
+	
+TARGET_LINK_LIBRARIES(Bundle_Adjustment_Dino ${SSP_LIB})
