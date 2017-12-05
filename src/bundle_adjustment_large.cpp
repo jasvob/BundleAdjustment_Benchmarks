@@ -9,17 +9,20 @@
 
 #include <Eigen/Eigen>
 
+#include "BATypeUtils.h"
 #include "Logger.h"
+#include "Utils.h"
+#include "MathUtils.h"
 
 #include "Optimization/BAFunctor.h"
 #include "CameraMatrix.h"
 #include "DistortionFunction.h"
 
-#include "Utils.h"
-#include "MathUtils.h"
-
 #include <unsupported/Eigen/NumericalDiff>
+#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/BacktrackLevMarqMore.h>
 #include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/TrustRegionLevMarq.h>
+#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/BacktrackLevMarqCholesky.h>
+#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/BacktrackLevMarqQRChol.h>
 
 enum ReturnCodes {
 	Success = 0,
@@ -30,8 +33,8 @@ enum ReturnCodes {
 
 typedef BAFunctor OptimizationFunctor;
 
-const double AVG_FOCAL_LENGTH = 1.0;
-const double INLIER_THRESHOLD = 0.5;
+const Scalar AVG_FOCAL_LENGTH = 1.0;
+const Scalar INLIER_THRESHOLD = 0.5;
 
 using namespace Eigen;
 
@@ -52,7 +55,7 @@ int main(int argc, char * argv[]) {
 	}
 
 	/***************** Read input data from file *****************/
-	const double avg_focal_length = AVG_FOCAL_LENGTH;
+	const Scalar avg_focal_length = AVG_FOCAL_LENGTH;
 
 	int N, M, K;
 	ifs >> N >> M >> K;
@@ -60,7 +63,7 @@ int main(int argc, char * argv[]) {
 
 	// Read image measurements data
 	std::cout << "Reading image measurements..." << std::endl;
-	Eigen::Matrix2Xd measurements(2, K);
+	Matrix2XX measurements(2, K);
 	std::vector<int> correspondingView(K, -1);
 	std::vector<int> correspondingPoint(K, -1);
 	for (int k = 0; k < K; ++k) {
@@ -77,29 +80,29 @@ int main(int argc, char * argv[]) {
 	DistortionFunction::Vector distortions(N);
 	unsigned int accumulatedPoints = 0;
 	for (int i = 0; i < N; ++i) {
-		Eigen::Vector3d om, T;
-		double f, k1, k2;
+		Vector3X om, T;
+		Scalar f, k1, k2;
 		ifs >> om(0) >> om(1) >> om(2);
 		ifs >> T(0) >> T(1) >> T(2);
 		ifs >> f >> k1 >> k2;
 
-		Eigen::Matrix3d K = Eigen::Matrix3d::Identity();
+		Matrix3X K = Matrix3X::Identity();
 		K(0, 0) = K(1, 1) = -f / avg_focal_length;
 		cams[i].setIntrinsic(K);
 		cams[i].setTranslation(T);
 
-		Eigen::Matrix3d R;
+		Matrix3X R;
 		Math::createRotationMatrixRodrigues(om, R);
 		cams[i].setRotation(R);
 
-		const double f2 = f * f;
+		const Scalar f2 = f * f;
 		distortions[i] = DistortionFunction(k1 * f2, k2 * f2 * f2);
 	}
 	std::cout << "Done." << std::endl;
 
 	// Read the data points
 	std::cout << "Reading 3D points..." << std::endl;
-	Eigen::Matrix3Xd data(3, M);
+	Matrix3XX data(3, M);
 	for (int j = 0; j < M; ++j) {
 		ifs >> data(0, j) >> data(1, j) >> data(2, j);
 	}
@@ -112,7 +115,7 @@ int main(int argc, char * argv[]) {
 		data, measurements, correspondingView, correspondingPoint);
 
 	/***************** Setup and run the optimization *****************/
-	Eigen::VectorXd weights = Eigen::VectorXd::Ones(measurements.cols());
+	VectorXX weights = VectorXX::Ones(measurements.cols());
 
 	// Set initial optimization parameters
 	OptimizationFunctor::InputType params;
@@ -124,63 +127,44 @@ int main(int argc, char * argv[]) {
 	// Craete optimization functor
 	OptimizationFunctor functor(data.cols(), cams.size(), measurements, correspondingView, correspondingPoint, INLIER_THRESHOLD);
 	
-
-
-
-	// Check Jacobian
-	/*
-	std::cout << "Testing Jacobian ..." << std::endl;
-	for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
-		std::cout << "Eps = " << eps << std::endl;
-		NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
-		OptimizationFunctor::JacobianType J;
-		OptimizationFunctor::JacobianType J_fd;
-		std::cout << "Compute J ..." << std::endl;
-		functor.df(params, J);
-		std::cout << "Compute J_fd ..." << std::endl;
-		fd.df(params, J_fd);
-		std::cout << "Compute diff ..." << std::endl;
-		double diff = (J - J_fd).norm();
-
-		Logger::instance()->logMatrixCSV(J.block(0, 0, 1024, 1024).toDense(), "J_pts.csv");
-		Logger::instance()->logMatrixCSV(J.block(0, data.cols() * 3, 1024, cams.size() * 9).toDense(), "J_cams.csv");
-		Logger::instance()->logMatrixCSV(J_fd.block(0, 0, 1024, 1024).toDense(), "J_fd_pts.csv");
-		Logger::instance()->logMatrixCSV(J_fd.block(0, data.cols() * 3, 1024, cams.size() * 9).toDense(), "J_fd_cams.csv");
-
-		if (diff > 0) {
-			std::stringstream ss;
-			ss << "Jacobian diff(eps=" << eps << "), = " << diff;
-			std::cout << ss.str() << std::endl;
-		}
-
-		if (diff > 10.0) {
-			std::cout << "Test Jacobian - ERROR TOO BIG, exitting..." << std::endl;
-			return 0;
-		}
-	}
-	std::cout << "Test Jacobian - DONE, exitting..." << std::endl;
-	//*/
-
-	// Craete the LM optimizer
-  ///*
-	Eigen::BacktrackLevMarq< OptimizationFunctor, true > lm(functor);
-
-	// Run optimization
-	clock_t begin = clock();
-	Eigen::BacktrackLevMarqInfo::Status info = lm.minimize(params);
-  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqInfo::statusToString(info) << std::endl;
-  //*/
-  /*
-  Eigen::TrustRegionLevMarq< OptimizationFunctor, true > lm(functor);
-
+  // Craete the LM optimizer 
+#ifdef QRKIT
+  Eigen::BacktrackLevMarq< OptimizationFunctor, true > lm(functor);
   // Run optimization
   clock_t begin = clock();
-  Eigen::TrustRegionLevMarqInfo::Status info = lm.minimize(params);
-	std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
-  std::cout << "LM finished with status: " << Eigen::TrustRegionLevMarqInfo::statusToString(info) << std::endl;
-  //*/
-	
+  Eigen::BacktrackLevMarqInfo::Status info = lm.minimize(params);
+  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
+  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqInfo::statusToString(info) << std::endl;
+#elif QRCHOL
+  Eigen::BacktrackLevMarqQRCHol< OptimizationFunctor, true > lm(functor);
+  // Run optimization
+  clock_t begin = clock();
+  Eigen::BacktrackLevMarqQRCHolInfo::Status info = lm.minimize(params);
+  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
+  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqQRCHolInfo::statusToString(info) << std::endl;
+#elif MOREQR
+  Eigen::BacktrackLevMarqMore< OptimizationFunctor, true > lm(functor);
+  // Run optimization
+  clock_t begin = clock();
+  Eigen::BacktrackLevMarqMoreInfo::Status info = lm.minimize(params);
+  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
+  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqMoreInfo::statusToString(info) << std::endl;
+#elif QRSPQR
+  Eigen::BacktrackLevMarq< OptimizationFunctor, true > lm(functor);
+  // Run optimization
+  clock_t begin = clock();
+  Eigen::BacktrackLevMarqInfo::Status info = lm.minimize(params);
+  std::cout << "lm.minimize(params) ... " << Scalar(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
+  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqInfo::statusToString(info) << std::endl;
+#elif CHOLESKY
+  Eigen::BacktrackLevMarqCholesky< OptimizationFunctor, true > lm(functor);
+  // Run optimization
+  clock_t begin = clock();
+  Eigen::BacktrackLevMarqCholeskyInfo::Status info = lm.minimize(params);
+  std::cout << "lm.minimize(params) ... " << double(clock() - begin) / CLOCKS_PER_SEC << "s" << std::endl;
+  std::cout << "LM finished with status: " << Eigen::BacktrackLevMarqCholeskyInfo::statusToString(info) << std::endl;
+#endif
+
 	/***************** Show statistics after the optimization *****************/
 	Utils::showErrorStatistics(avg_focal_length, INLIER_THRESHOLD, params.cams, params.distortions,
 		params.data_points, measurements, correspondingView, correspondingPoint);

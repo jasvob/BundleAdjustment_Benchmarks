@@ -4,35 +4,37 @@
 #include <vector>
 #include <Eigen/Eigen>
 
+#include "BATypeUtils.h"
+
 class DistortionFunction {
 public:
 	typedef std::vector<DistortionFunction> Vector;
 
 	DistortionFunction();
-	DistortionFunction(double k1, double k2);
+	DistortionFunction(Scalar k1, Scalar k2);
 	~DistortionFunction();
 
-	Eigen::Vector2d operator()(const Eigen::Vector2d &xu) const;
+	Vector2X operator()(const Vector2X &xu) const;
 
-	Eigen::Matrix2d derivativeWrtRadialParameters(const Eigen::Vector2d &xu) const;
-	Eigen::Matrix2d derivativeWrtUndistortedPoint(const Eigen::Vector2d &xu) const;
+	Matrix2X derivativeWrtRadialParameters(const Vector2X &xu) const;
+  Matrix2X derivativeWrtUndistortedPoint(const Vector2X &xu) const;
 
-	double getK1() const {
+	Scalar getK1() const {
 		return this->m_k1;
 	}
-	double getK2() const {
+  Scalar getK2() const {
 		return this->m_k2;
 	}
 
-	double& k1() {
+  Scalar& k1() {
 		return this->m_k1;
 	}
-	double& k2() {
+  Scalar& k2() {
 		return this->m_k2;
 	}
 
 private:
-	double m_k1, m_k2;
+  Scalar m_k1, m_k2;
 };
 
 #endif

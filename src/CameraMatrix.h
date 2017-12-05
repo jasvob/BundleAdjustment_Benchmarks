@@ -4,9 +4,9 @@
 #include <vector>
 #include <Eigen/Eigen>
 
-#include "DistortionFunction.h"
+#include "BATypeUtils.h"
 
-typedef Eigen::Matrix<double, 3, 4> Matrix3x4d;
+#include "DistortionFunction.h"
 
 template<typename T> T sqr(T t) { return t * t; }
 
@@ -15,65 +15,65 @@ public:
 	typedef std::vector<CameraMatrix> Vector;
 
 	CameraMatrix();
-	CameraMatrix(double f, double cx, double cy);
-	CameraMatrix(const Eigen::Matrix3d &K, const Matrix3x4d &RT);
-	CameraMatrix(const Matrix3x4d &P);
+	CameraMatrix(Scalar f, Scalar cx, Scalar cy);
+	CameraMatrix(const Matrix3X &K, const Matrix3x4X &RT);
+	CameraMatrix(const Matrix3x4X &P);
 	~CameraMatrix();
 
 	CameraMatrix& operator=(const CameraMatrix &cam);
 
-	void setIntrinsic(const Eigen::Matrix3d &K);
-	void setRotation(const Eigen::Matrix3d &R);
-	void setTranslation(const Eigen::Vector3d &T);
-	void setCameraCenter(const Eigen::Vector3d &c);
-	void setOrientation(const Matrix3x4d &RT);
-	void setSize(double w, double h);
+	void setIntrinsic(const Matrix3X &K);
+	void setRotation(const Matrix3X &R);
+	void setTranslation(const Vector3X &T);
+	void setCameraCenter(const Vector3X &c);
+	void setOrientation(const Matrix3x4X &RT);
+	void setSize(Scalar w, Scalar h);
 
-	const Eigen::Matrix3d& getIntrinsic() const;
-	const Eigen::Matrix3d& getRotation() const;
-	const Eigen::Vector3d& getTranslation() const;
-	const Eigen::Vector2d& getSize() const;
-	double getWidth() const;
-	double getHeight() const;
-	const Eigen::Vector3d& getCameraCenter() const;
+	const Matrix3X& getIntrinsic() const;
+	const Matrix3X& getRotation() const;
+	const Vector3X& getTranslation() const;
+	const Vector2X& getSize() const;
+	Scalar getWidth() const;
+	Scalar getHeight() const;
+	const Vector3X& getCameraCenter() const;
 
-	const Eigen::Vector3d opticalAxis() const;
-	const Eigen::Vector3d upVector() const;
-	const Eigen::Vector3d rightVector() const;
+	const Vector3X opticalAxis() const;
+	const Vector3X upVector() const;
+	const Vector3X rightVector() const;
 
-	const Matrix3x4d getExtrinsic() const;
-	const Matrix3x4d getOrientation() const;
-	const Matrix3x4d getProjection() const;
+	const Matrix3x4X getExtrinsic() const;
+	const Matrix3x4X getOrientation() const;
+	const Matrix3x4X getProjection() const;
 
-	double getFocalLength() const;
-	double getAspectRatio() const;
+	Scalar getFocalLength() const;
+	Scalar getAspectRatio() const;
 
-	Eigen::Vector2d getPrincipalPoint() const;
-	Eigen::Vector2d projectPoint(const Eigen::Vector3d& X) const;
-	Eigen::Vector2d projectPoint(const DistortionFunction &distortion, const Eigen::Vector3d &X) const;
-	Eigen::Vector3d unprojectPixel(const Eigen::Vector2d &p, double depth = 1) const;
+	Vector2X getPrincipalPoint() const;
+	Vector2X projectPoint(const Vector3X& X) const;
+	Vector2X projectPoint(const DistortionFunction &distortion, const Vector3X &X) const;
+	Vector3X unprojectPixel(const Vector2X &p, Scalar depth = 1) const;
 
-	Eigen::Vector3d intersectRayWithPlane(const Eigen::Vector4d &plane, int x, int y) const;
+	Vector3X intersectRayWithPlane(const Vector4X &plane, int x, int y) const;
 	
-	Eigen::Vector3d transformPointIntoCameraSpace(const Eigen::Vector3d &p) const;
-	Eigen::Vector3d transformPointFromCameraSpace(const Eigen::Vector3d &p) const;
-	Eigen::Vector3d transformDirectionFromCameraSpace(const Eigen::Vector3d &dir) const;
-	Eigen::Vector3d transformDirectionIntoCameraSpace(const Eigen::Vector3d &dir) const;
+	Vector3X transformPointIntoCameraSpace(const Vector3X &p) const;
+	Vector3X transformPointFromCameraSpace(const Vector3X &p) const;
+	Vector3X transformDirectionFromCameraSpace(const Vector3X &dir) const; 
+	Vector3X transformDirectionIntoCameraSpace(const Vector3X &dir) const;
 
-	Eigen::Vector2d transformPointIntoNormalizedCoordinate(const Eigen::Vector2d &p) const;
-	Eigen::Vector2d transformPointFromNormalizedCoordinate(const Eigen::Vector2d &p) const;
+	Vector2X transformPointIntoNormalizedCoordinate(const Vector2X &p) const;
+	Vector2X transformPointFromNormalizedCoordinate(const Vector2X &p) const;
 
-	Eigen::Vector3d getRay(const Eigen::Vector2d& p) const;
-	bool isOnGoodSide(const Eigen::Vector3d& p) const;
+	Vector3X getRay(const Vector2X& p) const;
+	bool isOnGoodSide(const Vector3X& p) const;
 
 private:
 	void updateCachedValues(bool intrinsic, bool orientation);
 
-	Eigen::Matrix3d m_K, m_R;
-	Eigen::Vector3d m_T;
-	Eigen::Matrix3d m_invK, m_Rt;
-	Eigen::Vector3d m_center;
-	Eigen::Vector2d m_size;
+	Matrix3X m_K, m_R;
+	Vector3X m_T;
+	Matrix3X m_invK, m_Rt;
+	Vector3X m_center;
+	Vector2X m_size;
 
 };
 

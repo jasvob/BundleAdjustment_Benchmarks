@@ -2,9 +2,9 @@
 
 #include <iostream>
 
-BAFunctor::BAFunctor(const Eigen::Index numPoints, const Eigen::Index numCameras, const Eigen::Matrix2Xd &measurements,
+BAFunctor::BAFunctor(const Eigen::Index numPoints, const Eigen::Index numCameras, const Matrix2XX &measurements,
 	const std::vector<int> &correspondingView, const std::vector<int> &correspondingPoint,
-	double inlierThreshold) 
+	Scalar inlierThreshold) 
 	: Base(numPoints * 3 + numCameras * 9, measurements.cols() * 2),
 	measurements(measurements),
 	correspondingView(correspondingView),
@@ -34,16 +34,16 @@ Scalar BAFunctor::estimateNorm(InputType const& x, StepType const& diag) {
 	Index focalLengthOffset = 6;
 	Index radialParamsOffset = 7;
 
-	double total = 0.0;
-	Eigen::Vector3d T, omega;
-	Eigen::Vector2d k12;
-	double focalLength = 0.0;
-	Eigen::Matrix3d R;
+	Scalar total = 0.0;
+	Vector3X T, omega;
+	Vector2X k12;
+	Scalar focalLength = 0.0;
+	Matrix3X R;
 	for (int i = 0; i < x.nCameras(); i++) {
 		T = x.cams[i].getTranslation();
 		R = x.cams[i].getRotation();
 		Math::createRodriguesParamFromRotationMatrix(R, omega);
-		k12 = Eigen::Vector2d(x.distortions[i].getK1(), x.distortions[i].getK2());
+		k12 = Vector2X(x.distortions[i].getK1(), x.distortions[i].getK2());
 		focalLength = x.cams[i].getFocalLength();
 
 		total += T.cwiseProduct(diag.segment<3>(cam_base + i * numCamParams)).stableNorm();
@@ -54,27 +54,27 @@ Scalar BAFunctor::estimateNorm(InputType const& x, StepType const& diag) {
 	total = total * total;
 
 
-	Map<VectorXd> xtop{ (double*)x.data_points.data(), x.nDataPoints() * 3 };
+	Map<VectorXX> xtop{ (Scalar*)x.data_points.data(), x.nDataPoints() * 3 };
 	total += xtop.cwiseProduct(diag.head(x.nDataPoints() * 3)).squaredNorm();
 
 	return Scalar(sqrt(total));
-
-	/*
-	Eigen::Vector3d pt;
-	for (int i = 0; i < x.nDataPoints(); i++) {
-		pt = 
-	}
-	*/
 }
 
 // And tell the algorithm how to set the QR parameters.
 void BAFunctor::initQRSolver(SchurlikeQRSolver &qr) {
-	// set block size
-	//int blkRows = 2;
-	//int blkCols = 3;
-	//int blockOverlap = 0;
-	qr.setSparseBlockParams(this->measurements.cols() * 2 + this->numPointParams, this->numPointParams);
-	//qr.getLeftSolver().setPattern(data_points.cols() * blkRows, data_points.cols() * (blkCols - blockOverlap), blkRows, blkCols, blockOverlap);
+#ifdef QRKIT
+  qr.setSparseBlockParams(this->measurements.cols() * 2 + this->numPointParams, this->numPointParams);
+#elif QRCHOL
+  qr.setSparseBlockParams(this->measurements.cols() * 2 + this->numPointParams, this->numPointParams);
+#elif MOREQR
+  qr.setSparseBlockParams(this->measurements.cols() * 2, this->numPointParams);
+#endif
+}
+
+void BAFunctor::initQRSolverInner(SchurlikeQRSolver &qr) {
+#ifdef MOREQR 
+  qr.setSparseBlockParams(this->numPointParams * 2, this->numPointParams);
+#endif
 }
 
 // Functor functions
