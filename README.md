@@ -3,7 +3,7 @@ Bundle adjustment benchmarking code.
 
 Project is configured via CMake, which creates separate project for each currently available solver.
 
-Currently available benchmarks:
+### Benchmarks:
  * Bundle_Adjustment_QRKit - QRKIT
  * Bundle_Adjustment_QRChol - QRCHOL
  * Bundle_Adjustment_MoreQR - MOREQR
@@ -17,9 +17,28 @@ All benchmarks share the same code and only where needed, type of the solver is 
 * QRSPQR - SuiteSparseQR on the whole matrix
 * CHOLESKY - Cholesky LDLT on the whole matrix
 
-Switching machine precision is done using typedef in BATypeUtils.h:
+### Switching machine precision 
+is done using typedef in BATypeUtils.h:
  * Single precision (Float32) - typedef float Scalar;
  * Double precision (Double64) - typedef double Scalar;
+
+### How To Run: 
+
+All projects expect input data file in th same format. Find some samples in the data folder of this repository.
+
+#### Usage:
+
+project_name.exe problem_data_file.txt
+
+#### For example:
+
+Bundle_Adjustment_QRKit.exe data/problem-16-22106-pre.txt
+Bundle_Adjustment_Cholesky.exe data/problem-21-11315-pre.txt
+
+### Acknowledgements
+
+The data samples are taken from
+http://grail.cs.washington.edu/projects/bal/
 
 Some parts of the code are ported Eigen C++ implementation of 
 https://github.com/chzach/SSBA
