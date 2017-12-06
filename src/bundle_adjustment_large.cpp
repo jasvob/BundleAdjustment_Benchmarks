@@ -19,10 +19,9 @@
 #include "DistortionFunction.h"
 
 #include <unsupported/Eigen/NumericalDiff>
-#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/BacktrackLevMarqMore.h>
-#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/TrustRegionLevMarq.h>
-#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/BacktrackLevMarqCholesky.h>
-#include <unsupported/Eigen/src/LevenbergMarquardt/BacktrackLevMarq/BacktrackLevMarqQRChol.h>
+#include "Eigen_ext/BacktrackLevMarqMore.h"
+#include "Eigen_ext/BacktrackLevMarqCholesky.h"
+#include "Eigen_ext/BacktrackLevMarqQRChol.h"
 
 enum ReturnCodes {
 	Success = 0,
